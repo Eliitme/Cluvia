@@ -2,13 +2,15 @@ import Foundation
 import KubeKit
 
 enum ResourceAction: String, CaseIterable, Identifiable {
-    case logs, edit, scale, restart, cordon, uncordon, delete
+    case logs, shell, portForward, edit, scale, restart, cordon, uncordon, delete
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
         case .logs: "Logs"
+        case .shell: "Shell"
+        case .portForward: "Forward Port…"
         case .edit: "Edit YAML"
         case .scale: "Scale…"
         case .restart: "Restart"
@@ -21,6 +23,8 @@ enum ResourceAction: String, CaseIterable, Identifiable {
     var symbol: String {
         switch self {
         case .logs: "text.alignleft"
+        case .shell: "terminal"
+        case .portForward: "arrow.left.arrow.right"
         case .edit: "pencil"
         case .scale: "arrow.up.and.down"
         case .restart: "arrow.clockwise"
@@ -37,7 +41,8 @@ enum ResourceAction: String, CaseIterable, Identifiable {
         // Group checks keep a CRD that happens to be called "Deployment" from getting built-in actions.
         let core = kind.gvr.group.isEmpty, apps = kind.gvr.group == "apps"
         var actions: [ResourceAction] = []
-        if core, kind.kind == "Pod" { actions.append(.logs) }
+        if core, kind.kind == "Pod" { actions += [.logs, .shell] }
+        if core, ["Pod", "Service"].contains(kind.kind) { actions.append(.portForward) }
         actions.append(.edit)
         if apps, ["Deployment", "StatefulSet", "ReplicaSet"].contains(kind.kind) { actions.append(.scale) }
         if apps, ["Deployment", "StatefulSet", "DaemonSet"].contains(kind.kind) { actions.append(.restart) }

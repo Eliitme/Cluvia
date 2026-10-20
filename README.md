@@ -17,8 +17,15 @@ project.yml          Xcode project definition (XcodeGen)
 
 ```sh
 brew install xcodegen
+xcodebuild -downloadComponent MetalToolchain   # once; the terminal renderer ships Metal shaders
 xcodegen generate
-open Cluvia.xcodeproj
+open Cluvia.xcodeproj                          # trust the SwiftTerm build plugin when Xcode asks
+```
+
+Command-line builds need `-skipPackagePluginValidation` for the same plugin:
+
+```sh
+xcodebuild -project Cluvia.xcodeproj -scheme Cluvia -skipPackagePluginValidation build
 ```
 
 `Cluvia.xcodeproj` is generated and not committed; edit `project.yml` instead.
@@ -47,6 +54,8 @@ Opt-in checks:
 ```sh
 # API server restart recovery (kind only; restarts the node container, run it alone)
 CLUVIA_IT_CONTEXT=kind-cluvia-dev CLUVIA_IT_DISRUPT=1 swift test --filter recoversAfterApiServerRestart
+# memory of 5 idle shells + 5 port-forwards
+CLUVIA_IT_CONTEXT=kind-cluvia-dev CLUVIA_IT_FOOTPRINT=1 swift test -c release --filter StreamingFootprint
 # 5k-pod list/memory budget against a namespace holding ~5000 pods
 CLUVIA_IT_CONTEXT=kind-cluvia-dev CLUVIA_IT_SCALE_NAMESPACE=cluvia-scale swift test -c release --filter WatchCacheScale
 ```

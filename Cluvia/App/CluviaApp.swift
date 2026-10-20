@@ -55,6 +55,8 @@ struct BrowserCommands: Commands {
             }
             .keyboardShortcut("j")
             .disabled(session == nil)
+            Button("Port Forwards") { session?.dock.showPortForwards() }
+                .disabled(session == nil)
             Divider()
             ForEach(Array(ResourceCategory.allCases.enumerated()), id: \.element) { index, category in
                 Button("Show \(category.rawValue)") {

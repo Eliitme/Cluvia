@@ -20,6 +20,13 @@ struct KubeTransportTests {
         #expect(url.query?.contains("a%2Bb") == true)
         let decoded = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems
         #expect(decoded == [URLQueryItem(name: "labelSelector", value: "a+b=c")])
+
+        let command = try transport.url(path: "/x", query: [
+            URLQueryItem(name: "command", value: "echo err >&2; a=b"), URLQueryItem(name: "command", value: "x y"),
+        ], webSocket: false)
+        #expect(URLComponents(url: command, resolvingAgainstBaseURL: false)?.queryItems == [
+            URLQueryItem(name: "command", value: "echo err >&2; a=b"), URLQueryItem(name: "command", value: "x y"),
+        ])
     }
 
     @Test func webSocketUrlSwitchesScheme() throws {

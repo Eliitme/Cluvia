@@ -22,6 +22,7 @@ final class ClusterSession {
     }
     var selectedObject: ObjectKey?
     let dock = DockModel()
+    let portForwards = PortForwardManager()
     /// Sheets driven from menus, the inspector and the command palette.
     var pendingAction: PendingAction?
     var editModel: YamlEditModel?
@@ -84,6 +85,7 @@ final class ClusterSession {
 
     func disconnect() {
         dock.closeAll()
+        portForwards.stopAll()
         registry?.releaseAll()
         registry = nil
         namespaceStore = nil

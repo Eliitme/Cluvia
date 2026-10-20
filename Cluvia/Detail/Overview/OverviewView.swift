@@ -26,7 +26,9 @@ struct OverviewView: View {
             if !object.labels.isEmpty { KeyValueSection(title: "Labels", values: object.labels) }
             let annotations = revealSecrets ? object.annotations : Unstructured(SecretMasking.masked(object.json)).annotations
             if !annotations.isEmpty { KeyValueSection(title: "Annotations", values: annotations, collapsed: true) }
-            KindSpecificSections(object: object, revealSecrets: $revealSecrets)
+            KindSpecificSections(object: object, revealSecrets: $revealSecrets) { action, container in
+                session.open(action, pod: object, container: container)
+            }
             ConditionsSection(conditions: object.json[path: "status", "conditions"]?.arrayValue ?? [])
         }
     }

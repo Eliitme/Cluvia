@@ -14,7 +14,7 @@ struct ClusterBrowserView: View {
                 if session.dock.isVisible {
                     VSplitView {
                         browser.frame(minHeight: 200)
-                        DockView(dock: session.dock).frame(minHeight: 140, idealHeight: 280)
+                        DockView(dock: session.dock, portForwards: session.portForwards).frame(minHeight: 140, idealHeight: 280)
                     }
                 } else {
                     browser
@@ -63,6 +63,8 @@ struct ActionSheetsModifier: ViewModifier {
             .sheet(item: $session.pendingAction) { pending in
                 if pending.action == .scale {
                     ScaleSheetLoader(session: session, pending: pending)
+                } else if pending.action == .portForward {
+                    ForwardPortSheetLoader(session: session, pending: pending)
                 } else {
                     ConfirmActionSheet(pending: pending, contextName: session.contextName) { policy in
                         await session.perform(pending, propagation: policy)
@@ -172,5 +174,24 @@ struct StatusBarView: View {
         case 1: session.selectedNamespaces.first!
         default: "\(session.selectedNamespaces.count) namespaces"
         }
+    }
+}
+
+private struct ForwardPortSheetLoader: View {
+    let session: ClusterSession
+    let pending: PendingAction
+    @State private var ports: [Int]?
+
+    var body: some View {
+        Group {
+            if let ports {
+                ForwardPortSheet(pending: pending, contextName: session.contextName, ports: ports) { remote, local in
+                    await session.startForward(pending, remotePort: remote, localPort: local)
+                }
+            } else {
+                ProgressView().padding(40)
+            }
+        }
+        .task { ports = await session.declaredPorts(pending) }
     }
 }

@@ -13,6 +13,9 @@ packages:
   STTextView:
     url: https://github.com/krzyzanowskim/STTextView
     from: 2.4.1
+  SwiftTerm:
+    url: https://github.com/migueldeicaza/SwiftTerm
+    minorVersion: 1.20.0
   KubeKit:
     path: Packages/KubeKit
   HelmKit:
@@ -27,6 +30,8 @@ targets:
       - package: HelmKit
       - package: STTextView
         product: STTextView
+      - package: SwiftTerm
+        product: SwiftTerm
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.cluvia.Cluvia

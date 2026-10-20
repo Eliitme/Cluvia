@@ -5,10 +5,12 @@ import SwiftUI
 struct KindSpecificSections: View {
     let object: Unstructured
     @Binding var revealSecrets: Bool
+    /// Logs or shell for one container of a pod.
+    var onContainerAction: (ResourceAction, String) -> Void = { _, _ in }
 
     var body: some View {
         switch object.kind {
-        case "Pod": PodSection(json: object.json)
+        case "Pod": PodSection(json: object.json, onContainerAction: onContainerAction)
         case "Deployment", "StatefulSet", "DaemonSet", "ReplicaSet": WorkloadSection(json: object.json)
         case "Node": NodeSection(json: object.json)
         case "Service": ServiceSection(json: object.json)
@@ -24,6 +26,7 @@ private func text(_ value: JSONValue?) -> String? {
 
 struct PodSection: View {
     let json: JSONValue
+    let onContainerAction: (ResourceAction, String) -> Void
 
     var body: some View {
         DetailSection("Pod") {
@@ -41,6 +44,12 @@ struct PodSection: View {
                 DetailRow(name) {
                     Text(container["image"]?.stringValue ?? "").font(.system(.callout, design: .monospaced)).textSelection(.enabled)
                     Text(Self.summary(status)).font(.caption).foregroundStyle(.secondary)
+                    HStack {
+                        Button("Logs") { onContainerAction(.logs, name) }
+                        Button("Shell") { onContainerAction(.shell, name) }
+                    }
+                    .buttonStyle(.link)
+                    .font(.caption)
                 }
             }
         }

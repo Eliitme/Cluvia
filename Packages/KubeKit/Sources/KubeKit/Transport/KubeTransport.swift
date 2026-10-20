@@ -153,12 +153,26 @@ public actor KubeTransport {
         }
         let prefix = components.path.hasSuffix("/") ? String(components.path.dropLast()) : components.path
         components.path = prefix + path
-        components.queryItems = query.isEmpty ? nil : query
-        // URLComponents leaves `+` literal, which servers decode as a space.
-        components.percentEncodedQuery = components.percentEncodedQuery?.replacingOccurrences(of: "+", with: "%2B")
+        // URLComponents leaves `&`, `=` and `+` literal inside values; the server would split an exec command like
+        // `echo x >&2` into two parameters and read `+` as a space. Encode names and values strictly.
+        components.percentEncodedQuery = query.isEmpty ? nil : query.map {
+            "\(Self.encodeQueryComponent($0.name))=\(Self.encodeQueryComponent($0.value ?? ""))"
+        }.joined(separator: "&")
         if webSocket { components.scheme = components.scheme == "http" ? "ws" : "wss" }
         guard let url = components.url else { throw KubeTransportError.invalidServerURL(serverURL.absoluteString) }
         return url
+    }
+}
+
+extension KubeTransport {
+    static let queryComponentAllowed: CharacterSet = {
+        var allowed = CharacterSet.urlQueryAllowed
+        allowed.remove(charactersIn: "&=+?#/;")
+        return allowed
+    }()
+
+    static func encodeQueryComponent(_ value: String) -> String {
+        value.addingPercentEncoding(withAllowedCharacters: queryComponentAllowed) ?? value
     }
 }
 

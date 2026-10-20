@@ -10,6 +10,11 @@ extension ClusterSession {
                 let pod = try await client.get(kind.gvr, name: key.name, namespace: key.namespace)
                 self.dock.openLogs(client: client, pod: pod)
             }
+        case .shell:
+            run { client in
+                let pod = try await client.get(kind.gvr, name: key.name, namespace: key.namespace)
+                self.dock.openShell(transport: client.transport, pod: pod, container: nil)
+            }
         case .edit:
             run { client in
                 guard let applier = self.applier else { return }
@@ -22,6 +27,39 @@ extension ClusterSession {
         default:
             pendingAction = PendingAction(action: action, kind: kind, key: key)
         }
+    }
+
+    /// Logs or shell for a specific container (from the pod overview).
+    func open(_ action: ResourceAction, pod: Unstructured, container: String) {
+        guard let client else { return }
+        switch action {
+        case .logs: dock.openLogs(client: client, pod: pod, container: container)
+        case .shell: dock.openShell(transport: client.transport, pod: pod, container: container)
+        default: break
+        }
+    }
+
+    /// Ports declared by a pod's containers or a service, offered in the forward sheet.
+    func declaredPorts(_ pending: PendingAction) async -> [Int] {
+        guard let client, let object = try? await client.get(pending.kind.gvr, name: pending.key.name, namespace: pending.key.namespace) else {
+            return []
+        }
+        let ports: [JSONValue] = pending.kind.kind == "Service"
+            ? object.json[path: "spec", "ports"]?.arrayValue ?? []
+            : (object.json[path: "spec", "containers"]?.arrayValue ?? []).flatMap { $0["ports"]?.arrayValue ?? [] }
+        // Port-forwarding is TCP only; a port can also be declared once per protocol (e.g. DNS 53).
+        let tcp = ports.filter { ($0["protocol"]?.stringValue ?? "TCP") == "TCP" }
+        var seen = Set<Int>()
+        return tcp.compactMap { ($0["port"] ?? $0["containerPort"])?.intValue.map(Int.init) }.filter { seen.insert($0).inserted }
+    }
+
+    func startForward(_ pending: PendingAction, remotePort: Int, localPort: UInt16?) async -> String? {
+        guard let client else { return "Not connected" }
+        let target: PortForwarder.Target = pending.kind.kind == "Service" ? .service(pending.key.name) : .pod(pending.key.name)
+        let error = await portForwards.start(client: client, namespace: pending.key.namespace ?? "default", target: target,
+                                             remotePort: remotePort, localPort: localPort)
+        if error == nil { dock.showPortForwards() }
+        return error
     }
 
     func createResource(of kind: ResourceKind) {
