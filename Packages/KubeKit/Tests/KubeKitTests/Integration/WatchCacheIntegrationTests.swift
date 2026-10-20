@@ -132,4 +132,16 @@ struct WatchCacheIntegrationTests {
         print("recovered \(recovered) after restart")
         try await client.delete(Self.configMaps, name: name, namespace: Self.namespace)
     }
+
+    @Test(.enabled(if: IntegrationCluster.environment["CLUVIA_IT_METRICS"] == "1"))
+    func metricsServerUsage() async throws {
+        let client = try Self.client()
+        let catalog = try await APIDiscovery(transport: client.transport).catalog()
+        #expect(MetricsService.isAvailable(in: catalog))
+        let metrics = MetricsService(client: client)
+        let nodes = try await metrics.nodeUsage()
+        #expect(!nodes.isEmpty && nodes.values.allSatisfy { $0.cpuCores > 0 && $0.memoryBytes > 0 })
+        let pods = try await metrics.podUsage(namespace: "kube-system")
+        #expect(pods.keys.contains { $0.name.hasPrefix("kube-apiserver") })
+    }
 }

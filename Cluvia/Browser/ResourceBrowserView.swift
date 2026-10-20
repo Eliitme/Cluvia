@@ -9,6 +9,9 @@ struct ResourceBrowserView: View {
     @State private var stores: [ResourceStore<ResourceTableRow>] = []
     @State private var filter = ""
     @State private var showInspector = false
+    @State private var usage = LiveUsageModel()
+
+    private var showsUsage: Bool { session.metricsAvailable && LiveUsageModel.supports(kind) }
 
     private var scopes: [String?] {
         kind.namespaced ? session.watchNamespaces : [nil]
@@ -42,12 +45,7 @@ struct ResourceBrowserView: View {
 
     var body: some View {
         let rows = visibleRows
-        ResourceTableView(
-            columns: columns, rows: rows, showNamespace: showNamespace, selection: $session.selectedObject,
-            actions: ResourceAction.available(for: kind)
-        ) { action, row in
-            session.request(action, kind: kind, key: row.id)
-        }
+        table(rows)
             .overlay { overlay(rowCount: rows.count) }
             .safeAreaInset(edge: .bottom, spacing: 0) { phaseBanner }
             .inspector(isPresented: $showInspector) {
@@ -78,6 +76,10 @@ struct ResourceBrowserView: View {
                 if selected != nil { showInspector = true }
             }
             .task(id: scopes) {
+                guard showsUsage, let client = session.client else { return }
+                await usage.poll(client: client, kind: kind, scopes: scopes)
+            }
+            .task(id: scopes) {
                 guard let registry = session.registry else { return }
                 let scopes = scopes
                 stores = scopes.map { registry.acquire(kind.gvr, namespace: $0) }
@@ -85,6 +87,16 @@ struct ResourceBrowserView: View {
                 // Holds the watches until the view goes away or the scopes change.
                 try? await Task.sleep(for: .seconds(1_000_000_000))
             }
+    }
+
+    private func table(_ rows: [ResourceTableRow]) -> ResourceTableView {
+        let extras = showsUsage ? usage.extras(for: kind) : TableExtras.none
+        return ResourceTableView(
+            columns: columns, rows: rows, showNamespace: showNamespace, selection: $session.selectedObject,
+            actions: ResourceAction.available(for: kind), onAction: { action, row in
+                session.request(action, kind: kind, key: row.id)
+            }, extras: extras
+        )
     }
 
     @ViewBuilder

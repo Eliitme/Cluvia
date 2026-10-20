@@ -12,6 +12,8 @@ struct ResourceTableView: NSViewRepresentable {
     /// Context-menu actions for a row.
     var actions: [ResourceAction] = []
     var onAction: (ResourceAction, ResourceTableRow) -> Void = { _, _ in }
+    /// Client-computed columns appended after the server's (e.g. live CPU and memory).
+    var extras = TableExtras.none
 
     func makeCoordinator() -> ResourceTableCoordinator {
         ResourceTableCoordinator(selection: $selection)
@@ -45,7 +47,7 @@ struct ResourceTableView: NSViewRepresentable {
         context.coordinator.selection = $selection
         context.coordinator.actions = actions
         context.coordinator.onAction = onAction
-        context.coordinator.update(columns: columns, rows: rows, showNamespace: showNamespace, selected: selection)
+        context.coordinator.update(columns: columns, rows: rows, showNamespace: showNamespace, extras: extras, selected: selection)
     }
 
     static func dismantleNSView(_ scroll: NSScrollView, coordinator: ResourceTableCoordinator) {
@@ -74,5 +76,26 @@ enum StatusTone {
         case .bad: .systemRed
         case .neutral: .labelColor
         }
+    }
+}
+
+/// Extra table columns computed by the app rather than printed by the server.
+struct TableExtras: Sendable {
+    struct Column: Equatable, Sendable {
+        let id: String
+        let title: String
+    }
+
+    let columns: [Column]
+    /// Changes whenever values change, so the table reloads even though the rows did not.
+    let version: Int
+    let value: @Sendable (String, ResourceTableRow) -> (text: String, number: Double?)?
+
+    static let none = TableExtras(columns: [], version: 0) { _, _ in nil }
+
+    static func identifier(_ id: String) -> NSUserInterfaceItemIdentifier { NSUserInterfaceItemIdentifier("x:\(id)") }
+
+    static func extraID(_ identifier: NSUserInterfaceItemIdentifier) -> String? {
+        identifier.rawValue.hasPrefix("x:") ? String(identifier.rawValue.dropFirst(2)) : nil
     }
 }

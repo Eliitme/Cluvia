@@ -17,6 +17,8 @@ final class ClusterSession {
     private(set) var kinds: [ResourceKind] = []
     private(set) var counts: [GroupVersionResource: Int] = [:]
     private(set) var serverVersion: String?
+    /// metrics.k8s.io is served (metrics-server installed); CPU/memory columns are hidden otherwise.
+    private(set) var metricsAvailable = false
     var selectedKind: ResourceKind? {
         didSet { if selectedKind != oldValue { selectedObject = nil } }
     }
@@ -70,6 +72,7 @@ final class ClusterSession {
             self.registry = registry
             namespaceStore = registry.acquire(.namespaces)
             kinds = ResourceKindRegistry.kinds(from: catalog)
+            metricsAvailable = MetricsService.isAvailable(in: catalog)
             if selectedKind == nil { selectedKind = kinds.first { $0.gvr == .pods } ?? kinds.first }
             state = .connected
         } catch {
