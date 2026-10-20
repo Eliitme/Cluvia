@@ -15,6 +15,17 @@ extension ClusterSession {
                 let pod = try await client.get(kind.gvr, name: key.name, namespace: key.namespace)
                 self.dock.openShell(transport: client.transport, pod: pod, container: nil)
             }
+        case .nodeShell:
+            run { client in
+                // kube-system is usually exempt from Pod Security admission, which rejects privileged pods elsewhere.
+                let namespace = "kube-system"
+                let name = try await NodeShellPod.create(client: client, node: key.name, namespace: namespace)
+                let pod = try await client.get(.pods, name: name, namespace: namespace)
+                self.dock.openShell(transport: client.transport, pod: pod, container: "shell", title: "node/\(key.name)",
+                                    command: NodeShellPod.command) {
+                    try? await client.delete(.pods, name: name, namespace: namespace, propagationPolicy: nil)
+                }
+            }
         case .edit:
             run { client in
                 guard let applier = self.applier else { return }

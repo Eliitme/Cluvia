@@ -55,7 +55,7 @@ struct ResourceActionTests {
     @Test func actionsMatchKinds() {
         #expect(ResourceAction.available(for: Self.kind("Pod")) == [.logs, .shell, .portForward, .edit, .delete])
         #expect(ResourceAction.available(for: Self.kind("Deployment")) == [.edit, .scale, .restart, .delete])
-        #expect(ResourceAction.available(for: Self.kind("Node", namespaced: false)) == [.edit, .cordon, .uncordon, .delete])
+        #expect(ResourceAction.available(for: Self.kind("Node", namespaced: false)) == [.edit, .cordon, .uncordon, .drain, .nodeShell, .delete])
         #expect(ResourceAction.allCases.filter(\.needsConfirmation) == [.restart, .cordon, .uncordon, .delete])
     }
 

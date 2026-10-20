@@ -147,9 +147,9 @@ struct ExecAndPortForwardIntegrationTests {
         let client = try WatchCacheIntegrationTests.client()
         let first = PortForwarder(client: client, namespace: Self.namespace, target: .pod("x"), remotePort: 1)
         let port = try await first.start()
-        defer { Task { await first.stop() } }
         let second = PortForwarder(client: client, namespace: Self.namespace, target: .pod("x"), remotePort: 1)
         await #expect(throws: (any Error).self) { try await second.start(localPort: port) }
+        await first.stop()
     }
 }
 

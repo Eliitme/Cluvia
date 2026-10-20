@@ -46,8 +46,10 @@ final class DockModel {
         add(Tab(id: model.id, content: .logs(model)))
     }
 
-    func openShell(transport: KubeTransport, pod: Unstructured, container: String?) {
-        let model = TerminalSessionModel(transport: transport, pod: pod, container: container)
+    func openShell(transport: KubeTransport, pod: Unstructured, container: String?, title: String? = nil,
+                   command: [String] = ExecSession.defaultShell, onClose: (@Sendable () async -> Void)? = nil) {
+        let model = TerminalSessionModel(transport: transport, pod: pod, container: container, title: title,
+                                         command: command, onClose: onClose)
         // A clean `exit` closes the tab; failures stay visible with their message.
         let id = model.id
         model.onCleanExit = { [weak self] in self?.close(id) }

@@ -20,7 +20,6 @@ struct LogsAndApplyIntegrationTests {
            "echo boot-$(cat /proc/sys/kernel/random/uuid); for i in 1 2 3; do echo tick $i; sleep 1; done"]}]}}
         """
         _ = try await client.create(.pods, namespace: Self.namespace, object: Unstructured(data: Data(pod.utf8)))
-        defer { Task { try? await client.delete(.pods, name: name, namespace: Self.namespace, propagationPolicy: nil) } }
 
         var boots = Set<String>()
         var reconnects = 0
@@ -37,6 +36,7 @@ struct LogsAndApplyIntegrationTests {
             }
             if boots.count >= 2 || Date() > deadline { break }
         }
+        try? await client.delete(.pods, name: name, namespace: Self.namespace, propagationPolicy: nil)
         #expect(boots.count >= 2, "saw \(boots.count) container instances after \(reconnects) reconnects")
     }
 

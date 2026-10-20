@@ -2,7 +2,7 @@ import Foundation
 import KubeKit
 
 enum ResourceAction: String, CaseIterable, Identifiable {
-    case logs, shell, portForward, edit, scale, restart, cordon, uncordon, delete
+    case logs, shell, portForward, edit, scale, restart, cordon, uncordon, drain, nodeShell, delete
 
     var id: String { rawValue }
 
@@ -16,6 +16,8 @@ enum ResourceAction: String, CaseIterable, Identifiable {
         case .restart: "Restart"
         case .cordon: "Cordon"
         case .uncordon: "Uncordon"
+        case .drain: "Drain…"
+        case .nodeShell: "Node Shell"
         case .delete: "Delete…"
         }
     }
@@ -30,6 +32,8 @@ enum ResourceAction: String, CaseIterable, Identifiable {
         case .restart: "arrow.clockwise"
         case .cordon: "nosign"
         case .uncordon: "checkmark.circle"
+        case .drain: "arrow.down.to.line"
+        case .nodeShell: "terminal.fill"
         case .delete: "trash"
         }
     }
@@ -46,7 +50,7 @@ enum ResourceAction: String, CaseIterable, Identifiable {
         actions.append(.edit)
         if apps, ["Deployment", "StatefulSet", "ReplicaSet"].contains(kind.kind) { actions.append(.scale) }
         if apps, ["Deployment", "StatefulSet", "DaemonSet"].contains(kind.kind) { actions.append(.restart) }
-        if core, kind.kind == "Node" { actions += [.cordon, .uncordon] }
+        if core, kind.kind == "Node" { actions += [.cordon, .uncordon, .drain, .nodeShell] }
         actions.append(.delete)
         return actions
     }

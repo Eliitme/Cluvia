@@ -67,6 +67,8 @@ struct ActionSheetsModifier: ViewModifier {
                     ScaleSheetLoader(session: session, pending: pending)
                 } else if pending.action == .portForward {
                     ForwardPortSheetLoader(session: session, pending: pending)
+                } else if pending.action == .drain {
+                    DrainSheet(pending: pending, contextName: session.contextName, client: session.client)
                 } else {
                     ConfirmActionSheet(pending: pending, contextName: session.contextName) { policy in
                         await session.perform(pending, propagation: policy)

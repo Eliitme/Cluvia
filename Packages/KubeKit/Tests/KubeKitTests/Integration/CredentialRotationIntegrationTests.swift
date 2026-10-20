@@ -27,7 +27,6 @@ struct CredentialRotationIntegrationTests {
         request["status"] = ["conditions": [[
             "type": "Approved", "status": "True", "reason": "IntegrationTest", "message": "approved by test",
         ]]]
-        defer { Task { _ = try? await admin.data(KubeRequest(method: "DELETE", path: "\(path)/\(name)")) } }
         _ = try await admin.data(KubeRequest(
             method: "PUT", path: "\(path)/\(name)/approval",
             body: try JSONSerialization.data(withJSONObject: request), contentType: "application/json"
@@ -36,10 +35,12 @@ struct CredentialRotationIntegrationTests {
             let current = try await IntegrationCluster.json(admin, KubeRequest(path: "\(path)/\(name)"))
             if let encoded = (current["status"] as? [String: Any])?["certificate"] as? String,
                let pem = Data(base64Encoded: encoded) {
+                _ = try? await admin.data(KubeRequest(method: "DELETE", path: "\(path)/\(name)"))
                 return (String(decoding: pem, as: UTF8.self), try String(contentsOf: keyURL, encoding: .utf8))
             }
             try await Task.sleep(for: .seconds(1))
         }
+        _ = try? await admin.data(KubeRequest(method: "DELETE", path: "\(path)/\(name)"))
         Issue.record("CSR \(name) was not signed")
         throw CancellationError()
     }

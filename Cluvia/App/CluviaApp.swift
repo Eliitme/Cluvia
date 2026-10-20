@@ -2,6 +2,7 @@ import SwiftUI
 
 @main
 struct CluviaApp: App {
+    @NSApplicationDelegateAdaptor(CluviaAppDelegate.self) private var appDelegate
     @State private var catalog = ClusterCatalogModel()
     @State private var settings = AppSettingsStore()
 

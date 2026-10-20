@@ -25,6 +25,8 @@ final class TerminalSessionModel: Identifiable {
     @ObservationIgnored private let inputStream: AsyncStream<Data>
     /// Called when the shell exits cleanly, so the tab can close itself.
     @ObservationIgnored var onCleanExit: (() -> Void)?
+    /// Cleanup when the tab closes, e.g. deleting a node-shell helper pod.
+    @ObservationIgnored private let onClose: (@Sendable () async -> Void)?
 
     /// The container `kubectl exec` would pick: the default-container annotation, else the first container.
     static func defaultContainer(of pod: Unstructured) -> String? {
@@ -32,11 +34,14 @@ final class TerminalSessionModel: Identifiable {
             ?? pod.json[path: "spec", "containers"]?.arrayValue?.first?["name"]?.stringValue
     }
 
-    init(transport: KubeTransport, pod: Unstructured, container: String?) {
+    init(transport: KubeTransport, pod: Unstructured, container: String?, title: String? = nil,
+         command: [String] = ExecSession.defaultShell, onClose: (@Sendable () async -> Void)? = nil) {
         let container = container ?? Self.defaultContainer(of: pod)
-        title = "\(pod.name)\(container.map { "/\($0)" } ?? "")"
+        self.title = title ?? "\(pod.name)\(container.map { "/\($0)" } ?? "")"
+        self.onClose = onClose
+        if let onClose { ShutdownCleanup.shared.register(id, onClose) }
         session = ExecSession(transport: transport, namespace: pod.namespace ?? "default", pod: pod.name,
-                              container: container, command: ExecSession.defaultShell)
+                              container: container, command: command)
         (inputStream, input) = AsyncStream.makeStream()
         terminalView = AppearanceTrackingTerminalView(frame: NSRect(x: 0, y: 0, width: 640, height: 320))
         terminalView.font = .monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
@@ -96,8 +101,12 @@ final class TerminalSessionModel: Identifiable {
 
     func stop() {
         input.finish()
-        let session = session
-        Task { await session.close() }
+        let session = session, onClose = onClose
+        ShutdownCleanup.shared.unregister(id)
+        Task {
+            await session.close()
+            await onClose?()
+        }
     }
 }
 
