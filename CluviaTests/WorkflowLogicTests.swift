@@ -54,7 +54,11 @@ struct ResourceActionTests {
 
     @Test func actionsMatchKinds() {
         #expect(ResourceAction.available(for: Self.kind("Pod")) == [.logs, .shell, .portForward, .edit, .delete])
-        #expect(ResourceAction.available(for: Self.kind("Deployment")) == [.edit, .scale, .restart, .delete])
+        #expect(ResourceAction.available(for: Self.kind("Deployment")) == [.logs, .edit, .scale, .restart, .delete])
+        let service = Unstructured(.object(["spec": .object(["selector": .object(["app": .string("web"), "tier": .string("fe")])])]))
+        #expect(ResourceActions.podSelector(of: service) == "app=web,tier=fe")
+        let deployment = Unstructured(.object(["spec": .object(["selector": .object(["matchLabels": .object(["app": .string("web")])])])]))
+        #expect(ResourceActions.podSelector(of: deployment) == "app=web")
         #expect(ResourceAction.available(for: Self.kind("Node", namespaced: false)) == [.edit, .cordon, .uncordon, .drain, .nodeShell, .delete])
         #expect(ResourceAction.allCases.filter(\.needsConfirmation) == [.restart, .cordon, .uncordon, .delete])
     }

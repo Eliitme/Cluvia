@@ -9,9 +9,15 @@ struct CommandPaletteView: View {
     @State private var query = ""
     @State private var selection: PaletteItem.ID?
     @State private var allItems: [PaletteItem] = []
+    /// Objects of any kind matching the query by name, found asynchronously.
+    @State private var remoteItems: [PaletteItem] = []
     @FocusState private var focused: Bool
 
-    private var results: [PaletteItem] { CommandPaletteIndex.search(query, in: allItems) }
+    private var results: [PaletteItem] {
+        let local = CommandPaletteIndex.search(query, in: allItems)
+        let seen = Set(local.map(\.id))
+        return local + remoteItems.filter { !seen.contains($0.id) }
+    }
 
     var body: some View {
         let results = results
@@ -42,8 +48,21 @@ struct CommandPaletteView: View {
         .onAppear {
             allItems = CommandPaletteIndex.items(session: session, contexts: catalog.contexts.map(\.name))
             focused = true
+            #if DEBUG
+            if let preset = UserDefaults.standard.string(forKey: "CluviaPaletteQuery") { query = preset }
+            #endif
         }
         .onChange(of: query) { selection = results.first?.id }
+        .task(id: query) {
+            try? await Task.sleep(for: .milliseconds(250))
+            guard !Task.isCancelled else { return }
+            let found = await session.searchIndex.search(query, session: session)
+            guard !Task.isCancelled else { return }
+            remoteItems = found.map { kind, key in
+                PaletteItem(id: "obj:\(kind.gvr):\(key)", title: key.name, subtitle: "\(kind.kind)\(key.namespace.map { " · \($0)" } ?? "")",
+                            symbol: "magnifyingglass", command: .reveal(kind, key))
+            }
+        }
         .onExitCommand { dismiss() }
     }
 

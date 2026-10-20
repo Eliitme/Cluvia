@@ -15,12 +15,16 @@ struct KindSpecificSections: View {
         case "Node": NodeSection(json: object.json)
         case "Service": ServiceSection(json: object.json)
         case "Secret", "ConfigMap": DataSection(json: object.json, secret: object.kind == "Secret", reveal: $revealSecrets)
+        case "Ingress": IngressSection(json: object.json)
+        case "PersistentVolumeClaim": ClaimSection(json: object.json)
+        case "HorizontalPodAutoscaler": AutoscalerSection(json: object.json)
         default: EmptyView()
         }
     }
 }
 
-private func text(_ value: JSONValue?) -> String? {
+/// Display text of a JSON field, nil when absent or empty.
+func jsonText(_ value: JSONValue?) -> String? {
     value.map(\.displayText).flatMap { $0.isEmpty ? nil : $0 }
 }
 
@@ -30,11 +34,11 @@ struct PodSection: View {
 
     var body: some View {
         DetailSection("Pod") {
-            DetailRow("Phase", value: text(json[path: "status", "phase"]))
-            DetailRow("Node", value: text(json[path: "spec", "nodeName"]))
-            DetailRow("Pod IP", value: text(json[path: "status", "podIP"]))
-            DetailRow("QoS Class", value: text(json[path: "status", "qosClass"]))
-            DetailRow("Service Account", value: text(json[path: "spec", "serviceAccountName"]))
+            DetailRow("Phase", value: jsonText(json[path: "status", "phase"]))
+            DetailRow("Node", value: jsonText(json[path: "spec", "nodeName"]))
+            DetailRow("Pod IP", value: jsonText(json[path: "status", "podIP"]))
+            DetailRow("QoS Class", value: jsonText(json[path: "status", "qosClass"]))
+            DetailRow("Service Account", value: jsonText(json[path: "spec", "serviceAccountName"]))
         }
         let statuses = json[path: "status", "containerStatuses"]?.arrayValue ?? []
         DetailSection("Containers") {
@@ -70,11 +74,11 @@ struct WorkloadSection: View {
 
     var body: some View {
         DetailSection("Replicas") {
-            DetailRow("Desired", value: text(json[path: "spec", "replicas"] ?? json[path: "status", "desiredNumberScheduled"]))
-            DetailRow("Ready", value: text(json[path: "status", "readyReplicas"] ?? json[path: "status", "numberReady"]) ?? "0")
-            DetailRow("Updated", value: text(json[path: "status", "updatedReplicas"] ?? json[path: "status", "updatedNumberScheduled"]))
-            DetailRow("Available", value: text(json[path: "status", "availableReplicas"] ?? json[path: "status", "numberAvailable"]))
-            DetailRow("Strategy", value: text(json[path: "spec", "strategy", "type"] ?? json[path: "spec", "updateStrategy", "type"]))
+            DetailRow("Desired", value: jsonText(json[path: "spec", "replicas"] ?? json[path: "status", "desiredNumberScheduled"]))
+            DetailRow("Ready", value: jsonText(json[path: "status", "readyReplicas"] ?? json[path: "status", "numberReady"]) ?? "0")
+            DetailRow("Updated", value: jsonText(json[path: "status", "updatedReplicas"] ?? json[path: "status", "updatedNumberScheduled"]))
+            DetailRow("Available", value: jsonText(json[path: "status", "availableReplicas"] ?? json[path: "status", "numberAvailable"]))
+            DetailRow("Strategy", value: jsonText(json[path: "spec", "strategy", "type"] ?? json[path: "spec", "updateStrategy", "type"]))
             DetailRow("Selector", value: json[path: "spec", "selector", "matchLabels"]?.objectValue.map {
                 $0.map { "\($0.key)=\($0.value.displayText)" }.sorted().joined(separator: ", ")
             })
@@ -87,18 +91,18 @@ struct NodeSection: View {
 
     var body: some View {
         DetailSection("Node") {
-            DetailRow("Kubelet", value: text(json[path: "status", "nodeInfo", "kubeletVersion"]))
-            DetailRow("OS Image", value: text(json[path: "status", "nodeInfo", "osImage"]))
-            DetailRow("Runtime", value: text(json[path: "status", "nodeInfo", "containerRuntimeVersion"]))
+            DetailRow("Kubelet", value: jsonText(json[path: "status", "nodeInfo", "kubeletVersion"]))
+            DetailRow("OS Image", value: jsonText(json[path: "status", "nodeInfo", "osImage"]))
+            DetailRow("Runtime", value: jsonText(json[path: "status", "nodeInfo", "containerRuntimeVersion"]))
             DetailRow("Addresses", value: (json[path: "status", "addresses"]?.arrayValue ?? []).compactMap {
                 guard let type = $0["type"]?.stringValue, let address = $0["address"]?.stringValue else { return nil }
                 return "\(type): \(address)"
             }.joined(separator: "\n"))
             ForEach(["cpu", "memory", "pods"], id: \.self) { resource in
-                DetailRow(resource.capitalized, value: "\(text(json[path: "status", "allocatable", resource]) ?? "?") allocatable of \(text(json[path: "status", "capacity", resource]) ?? "?")")
+                DetailRow(resource.capitalized, value: "\(jsonText(json[path: "status", "allocatable", resource]) ?? "?") allocatable of \(jsonText(json[path: "status", "capacity", resource]) ?? "?")")
             }
             DetailRow("Taints", value: (json[path: "spec", "taints"]?.arrayValue ?? []).map {
-                "\(text($0["key"]) ?? "")=\(text($0["value"]) ?? ""):\(text($0["effect"]) ?? "")"
+                "\(jsonText($0["key"]) ?? "")=\(jsonText($0["value"]) ?? ""):\(jsonText($0["effect"]) ?? "")"
             }.joined(separator: "\n"))
         }
     }
@@ -109,11 +113,11 @@ struct ServiceSection: View {
 
     var body: some View {
         DetailSection("Service") {
-            DetailRow("Type", value: text(json[path: "spec", "type"]))
-            DetailRow("Cluster IP", value: text(json[path: "spec", "clusterIP"]))
+            DetailRow("Type", value: jsonText(json[path: "spec", "type"]))
+            DetailRow("Cluster IP", value: jsonText(json[path: "spec", "clusterIP"]))
             DetailRow("Ports", value: (json[path: "spec", "ports"]?.arrayValue ?? []).map {
-                let target = text($0["targetPort"]).map { " → \($0)" } ?? ""
-                return "\(text($0["name"]).map { "\($0): " } ?? "")\(text($0["port"]) ?? "")/\(text($0["protocol"]) ?? "TCP")\(target)"
+                let target = jsonText($0["targetPort"]).map { " → \($0)" } ?? ""
+                return "\(jsonText($0["name"]).map { "\($0): " } ?? "")\(jsonText($0["port"]) ?? "")/\(jsonText($0["protocol"]) ?? "TCP")\(target)"
             }.joined(separator: "\n"))
             DetailRow("Selector", value: json[path: "spec", "selector"]?.objectValue.map {
                 $0.map { "\($0.key)=\($0.value.displayText)" }.sorted().joined(separator: ", ")

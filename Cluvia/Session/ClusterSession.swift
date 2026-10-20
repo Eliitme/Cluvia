@@ -29,6 +29,7 @@ final class ClusterSession {
     var showingHelm = false
     let helm: HelmReleasesModel
     let prometheus: PrometheusModel
+    @ObservationIgnored let searchIndex = GlobalSearchIndex()
     var selectedObject: ObjectKey?
     let dock = DockModel()
     let portForwards = PortForwardManager()

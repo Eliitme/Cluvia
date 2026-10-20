@@ -38,6 +38,15 @@ enum ResourceAction: String, CaseIterable, Identifiable {
         }
     }
 
+    /// Kinds whose pods are found through a label selector, so their logs can be shown together.
+    static func hasPodSelector(_ kind: ResourceKind) -> Bool {
+        switch (kind.gvr.group, kind.kind) {
+        case ("apps", "Deployment"), ("apps", "StatefulSet"), ("apps", "DaemonSet"), ("apps", "ReplicaSet"),
+             ("batch", "Job"), ("", "Service"): true
+        default: false
+        }
+    }
+
     /// Actions that disrupt workloads go through a confirmation that names the cluster context.
     var needsConfirmation: Bool { [.restart, .cordon, .uncordon, .delete].contains(self) }
 
@@ -46,6 +55,7 @@ enum ResourceAction: String, CaseIterable, Identifiable {
         let core = kind.gvr.group.isEmpty, apps = kind.gvr.group == "apps"
         var actions: [ResourceAction] = []
         if core, kind.kind == "Pod" { actions += [.logs, .shell] }
+        if Self.hasPodSelector(kind) { actions.append(.logs) }
         if core, ["Pod", "Service"].contains(kind.kind) { actions.append(.portForward) }
         actions.append(.edit)
         if apps, ["Deployment", "StatefulSet", "ReplicaSet"].contains(kind.kind) { actions.append(.scale) }
@@ -83,6 +93,13 @@ enum ResourceActions {
     static func setSchedulable(_ client: DynamicClient, kind: ResourceKind, key: ObjectKey, schedulable: Bool) async throws {
         let body = schedulable ? #"{"spec":{"unschedulable":null}}"# : #"{"spec":{"unschedulable":true}}"#
         _ = try await client.patch(kind.gvr, name: key.name, type: .merge, body: Data(body.utf8))
+    }
+
+    /// `k=v,…` from `spec.selector.matchLabels` (workloads) or `spec.selector` (services).
+    static func podSelector(of object: Unstructured) -> String? {
+        let selector = object.json[path: "spec", "selector", "matchLabels"]?.objectValue ?? object.json[path: "spec", "selector"]?.objectValue
+        let pairs = (selector ?? [:]).compactMap { key, value in value.stringValue.map { "\(key)=\($0)" } }.sorted()
+        return pairs.isEmpty ? nil : pairs.joined(separator: ",")
     }
 
     /// YAML for editing: the live object without status and server bookkeeping.

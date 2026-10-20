@@ -127,11 +127,28 @@ struct LogTextView: NSViewRepresentable {
             rescanFrom = 0
             countedUpTo = 0
         }
+        if model.isMultiPod, let colorFrom = rescanFrom.map({ max(0, $0) }) {
+            let order = Dictionary(model.sources.enumerated().map { ($1.pod, $0) }, uniquingKeysWith: { first, _ in first })
+            Self.colorPodPrefixes(in: storage, from: colorFrom == 0 ? 0 : countedUpTo, order: order)
+        }
         if let rescanFrom, !model.search.isEmpty {
             state.matches += highlight(model.search, in: textView, from: rescanFrom, countingAfter: countedUpTo)
         }
         if matchCount != state.matches { DispatchQueue.main.async { matchCount = state.matches } }
         if atBottom { textView.scrollToEndOfDocument(nil) }
+    }
+
+    static let prefixPattern = try! NSRegularExpression(pattern: #"([A-Za-z0-9.\-]+) │ "#)
+    static let prefixColors: [NSColor] = [.systemBlue, .systemGreen, .systemOrange, .systemPurple, .systemPink, .systemTeal, .systemYellow, .systemIndigo]
+
+    /// Colors each line's pod-name prefix; pods get distinct colors in the order they were opened.
+    static func colorPodPrefixes(in storage: NSTextStorage, from start: Int, order: [String: Int]) {
+        let range = NSRange(location: start, length: storage.length - start)
+        for match in prefixPattern.matches(in: storage.string, range: range) {
+            let name = (storage.string as NSString).substring(with: match.range(at: 1))
+            let color = prefixColors[(order[name] ?? 0) % prefixColors.count]
+            storage.addAttribute(.foregroundColor, value: color, range: match.range(at: 1))
+        }
     }
 
     private func applyWrap(_ wrap: Bool, to textView: NSTextView, scroll: NSScrollView) {

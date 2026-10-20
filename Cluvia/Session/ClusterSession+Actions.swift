@@ -5,6 +5,20 @@ import KubeKit
 extension ClusterSession {
     func request(_ action: ResourceAction, kind: ResourceKind, key: ObjectKey) {
         switch action {
+        case .logs where kind.kind != "Pod":
+            run { client in
+                let object = try await client.get(kind.gvr, name: key.name, namespace: key.namespace)
+                guard let selector = ResourceActions.podSelector(of: object) else {
+                    self.actionError = "\(kind.kind) \(key.name) has no pod selector"
+                    return
+                }
+                let pods = try await client.list(.pods, namespace: key.namespace, options: ListOptions(labelSelector: selector)).items
+                guard !pods.isEmpty else {
+                    self.actionError = "No pods match \(kind.kind) \(key.name)"
+                    return
+                }
+                self.dock.openLogs(client: client, title: "\(kind.kind.lowercased())/\(key.name)", pods: pods)
+            }
         case .logs:
             run { client in
                 let pod = try await client.get(kind.gvr, name: key.name, namespace: key.namespace)

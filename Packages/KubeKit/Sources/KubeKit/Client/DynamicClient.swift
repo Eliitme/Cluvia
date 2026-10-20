@@ -51,6 +51,15 @@ public struct DynamicClient: Sendable {
         return (items, json[path: "metadata", "resourceVersion"]?.stringValue)
     }
 
+    /// Names and namespaces of every object, without specs or status (cheap enough to scan many kinds).
+    public func listKeys(_ gvr: GroupVersionResource, namespace: String? = nil) async throws -> [ObjectKey] {
+        let json = try await decode(KubeRequest(
+            path: gvr.path(namespace: namespace),
+            accept: "application/json;as=PartialObjectMetadataList;g=meta.k8s.io;v=v1,application/json"
+        ), omittingKeys: ResourceTable.omittedKeys)
+        return (json["items"]?.arrayValue ?? []).map { Unstructured($0).key }
+    }
+
     /// Number of objects without transferring them: one metadata-only item plus the server's remaining count.
     public func count(_ gvr: GroupVersionResource, namespace: String? = nil) async throws -> Int {
         let json = try await decode(KubeRequest(

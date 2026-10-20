@@ -46,6 +46,11 @@ final class DockModel {
         add(Tab(id: model.id, content: .logs(model)))
     }
 
+    func openLogs(client: DynamicClient, title: String, pods: [Unstructured]) {
+        let model = LogViewModel(client: client, title: title, pods: pods)
+        add(Tab(id: model.id, content: .logs(model)))
+    }
+
     func openShell(transport: KubeTransport, pod: Unstructured, container: String?, title: String? = nil,
                    command: [String] = ExecSession.defaultShell, onClose: (@Sendable () async -> Void)? = nil) {
         let model = TerminalSessionModel(transport: transport, pod: pod, container: container, title: title,
