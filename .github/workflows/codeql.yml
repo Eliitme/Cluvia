@@ -1,8 +1,8 @@
 name: CodeQL
 
-# The default setup's autobuild only finds the Swift packages (the Xcode project is generated from project.yml), so
-# it scanned 47 of 160 Swift files and took ~12 minutes. This builds the whole app once, for the active architecture,
-# without signing, so every Swift file is analyzed.
+# Swift is scanned in the KubeKit and HelmKit packages, where the security-sensitive code lives (authentication, TLS,
+# kubeconfig writing, running credential plugins). The app target cannot be built under CodeQL's tracer: it compiles
+# SwiftTerm's Metal shaders, and the Metal compiler is unavailable there.
 on:
   push:
     branches: [main]
@@ -37,36 +37,27 @@ jobs:
           - language: actions
             build-mode: none
             runner: ubuntu-latest
-          # Intel: CodeQL traces Swift builds as x86_64. On Apple silicon that means Rosetta, where the build is
-          # emulated (20+ minutes) and the Metal shader compiler SwiftTerm needs is unavailable.
+          # Intel: CodeQL traces Swift builds as x86_64, which on Apple silicon runs emulated under Rosetta.
           - language: swift
             build-mode: manual
             runner: macos-15-intel
     steps:
       - uses: actions/checkout@v7
       # Everything but the compile happens before CodeQL starts tracing builds.
-      - name: Tools and dependencies
+      - name: Toolchain and dependencies
         if: matrix.build-mode == 'manual'
         run: |
           sudo xcode-select -s "$(ls -d /Applications/Xcode_26*.app | sort -V | tail -1)"
-          xcodebuild -version
-          brew install xcodegen
-          xcodebuild -downloadComponent MetalToolchain
-          xcodegen generate
-          xcodebuild -resolvePackageDependencies -project Cluvia.xcodeproj -scheme Cluvia \
-            -clonedSourcePackagesDirPath build/SourcePackages -skipPackagePluginValidation
+          swift --version
+          swift package resolve --package-path Packages/HelmKit
       - uses: github/codeql-action/init@v4
         with:
           languages: ${{ matrix.language }}
           build-mode: ${{ matrix.build-mode }}
       - name: Build
         if: matrix.build-mode == 'manual'
-        run: |
-          # No arch in the destination: under the tracer the active architecture is x86_64.
-          xcodebuild build -project Cluvia.xcodeproj -scheme Cluvia -configuration Debug \
-            -destination 'platform=macOS' -clonedSourcePackagesDirPath build/SourcePackages \
-            -disableAutomaticPackageResolution -skipPackagePluginValidation \
-            ONLY_ACTIVE_ARCH=YES CODE_SIGNING_ALLOWED=NO COMPILER_INDEX_STORE_ENABLE=NO
+        # HelmKit depends on KubeKit, so this compiles both packages.
+        run: swift build --package-path Packages/HelmKit
       - uses: github/codeql-action/analyze@v4
         with:
           category: /language:${{ matrix.language }}
