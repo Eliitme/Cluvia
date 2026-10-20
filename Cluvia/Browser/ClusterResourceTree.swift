@@ -13,11 +13,11 @@ struct ClusterResourceTree: View {
     @Bindable var session: ClusterSession
 
     var body: some View {
+        // No placeholder rows while connecting or after a failure: the badge dot and the detail pane show that.
+        // Swapping a placeholder for the real rows leaves stale rows drawn in the sidebar outline.
         switch session.state {
-        case .disconnected, .connecting:
-            Label("Connecting…", systemImage: "hourglass").foregroundStyle(.secondary)
-        case .failed:
-            Label("Cannot connect", systemImage: "exclamationmark.triangle").foregroundStyle(.red)
+        case .disconnected, .connecting, .failed:
+            EmptyView()
         case .connected:
             ForEach(ResourceCategory.allCases) { category in
                 let kinds = session.kinds.filter { $0.category == category }
