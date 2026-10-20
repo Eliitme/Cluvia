@@ -44,9 +44,7 @@ struct ResourceBrowserView: View {
 
     var body: some View {
         let rows = visibleRows
-        table(rows)
-            .overlay { overlay(rowCount: rows.count) }
-            .safeAreaInset(edge: .bottom, spacing: 0) { phaseBanner }
+        split(rows)
             .searchable(text: $filter, placement: .toolbar, prompt: "Filter (name, label, status:running)")
             .toolbar {
                 ToolbarItem {
@@ -63,10 +61,6 @@ struct ResourceBrowserView: View {
             .onChange(of: session.selectedObject, initial: true) { _, selected in
                 if selected != nil { session.showInspector = true }
             }
-            // The inspector lives at the window's detail root (so the toolbar makes room for it); it shows this row.
-            .onChange(of: session.selectedObject.flatMap { key in rows.first { $0.id == key } }, initial: true) { _, row in
-                session.inspectedRow = row
-            }
             .task(id: scopes) {
                 guard showsUsage, let client = session.client else { return }
                 await usage.poll(client: client, kind: kind, scopes: scopes)
@@ -79,6 +73,28 @@ struct ResourceBrowserView: View {
                 // Holds the watches until the view goes away or the scopes change.
                 try? await Task.sleep(for: .seconds(1_000_000_000))
             }
+    }
+
+    /// The table and, when shown, the selected object's detail panel. A plain split rather than the system inspector,
+    /// which runs up under the toolbar.
+    private func split(_ rows: [ResourceTableRow]) -> some View {
+        HSplitView {
+            table(rows)
+                .overlay { overlay(rowCount: rows.count) }
+                .safeAreaInset(edge: .bottom, spacing: 0) { phaseBanner }
+                .frame(minWidth: 360, maxWidth: .infinity)
+            if session.showInspector {
+                Group {
+                    if let key = session.selectedObject, let row = rows.first(where: { $0.id == key }) {
+                        ResourceDetailView(session: session, kind: kind, row: row)
+                            .id(row.id) // fresh model per object: never show the previous object's data or hide its error
+                    } else {
+                        ContentUnavailableView("No Selection", systemImage: "sidebar.right")
+                    }
+                }
+                .frame(minWidth: 320, idealWidth: 420, maxWidth: 700)
+            }
+        }
     }
 
     private func table(_ rows: [ResourceTableRow]) -> ResourceTableView {

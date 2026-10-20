@@ -35,8 +35,7 @@ final class ClusterSession {
     let prometheus: PrometheusModel
     @ObservationIgnored let searchIndex = GlobalSearchIndex()
     var selectedObject: ObjectKey?
-    /// The selected object's current table row, kept by the resource table for the detail inspector.
-    var inspectedRow: ResourceTableRow?
+    /// The detail panel next to the resource table.
     var showInspector = false
     let dock = DockModel()
     let portForwards = PortForwardManager()
