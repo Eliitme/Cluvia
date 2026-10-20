@@ -18,6 +18,7 @@ releases.</p>
   <img src="https://img.shields.io/badge/macOS-14%2B-0F172A?logo=apple" alt="macOS 14+">
   <img src="https://img.shields.io/badge/Swift-6-F05138?logo=swift&logoColor=white" alt="Swift 6">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-PolyForm%20Noncommercial-2563EB" alt="License: PolyForm Noncommercial 1.0.0"></a>
+  <a href="https://scorecard.dev/viewer/?uri=github.com/Eliitme/Cluvia"><img src="https://api.scorecard.dev/projects/github.com/Eliitme/Cluvia/badge" alt="OpenSSF Scorecard"></a>
   <a href="https://github.com/sponsors/Eliitme"><img src="https://img.shields.io/github/sponsors/Eliitme?label=sponsors&color=14B8A6" alt="Sponsors"></a>
 </p>
 
