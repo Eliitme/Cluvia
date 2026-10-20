@@ -1,20 +1,26 @@
 import KubeKit
 import SwiftUI
 
-/// Metadata shared by every kind, then kind-specific sections and conditions.
+/// Kind-specific state, conditions and usage first, then labels, annotations and metadata.
 struct OverviewView: View {
     let session: ClusterSession
     let object: Unstructured
     @Binding var revealSecrets: Bool
 
     var body: some View {
+        // What the object is doing comes first; identifiers and bookkeeping last.
         VStack(alignment: .leading, spacing: 16) {
+            KindSpecificSections(object: object, revealSecrets: $revealSecrets) { action, container in
+                session.open(action, pod: object, container: container)
+            }
+            ConditionsSection(conditions: object.json[path: "status", "conditions"]?.arrayValue ?? [])
+            if MetricsChartsSection.supportedKinds.contains(object.kind ?? "") {
+                MetricsChartsSection(session: session, object: object)
+            }
+            if !object.labels.isEmpty { KeyValueSection(title: "Labels", values: object.labels) }
+            let annotations = revealSecrets ? object.annotations : Unstructured(SecretMasking.masked(object.json)).annotations
+            if !annotations.isEmpty { KeyValueSection(title: "Annotations", values: annotations, collapsed: true) }
             DetailSection("Metadata") {
-                DetailRow("Created", value: object.creationTimestamp.map {
-                    "\(AgeFormatter.string(since: $0)) ago · \($0.formatted(date: .abbreviated, time: .standard))"
-                })
-                DetailRow("UID", value: object.uid)
-                DetailRow("Resource Version", value: object.resourceVersion)
                 if !object.ownerReferences.isEmpty {
                     DetailRow("Controlled By") {
                         ForEach(object.ownerReferences, id: \.uid) { owner in
@@ -22,17 +28,12 @@ struct OverviewView: View {
                         }
                     }
                 }
+                DetailRow("Created", value: object.creationTimestamp.map {
+                    "\(AgeFormatter.string(since: $0)) ago · \($0.formatted(date: .abbreviated, time: .standard))"
+                })
+                DetailRow("UID", value: object.uid)
+                DetailRow("Resource Version", value: object.resourceVersion)
             }
-            if !object.labels.isEmpty { KeyValueSection(title: "Labels", values: object.labels) }
-            let annotations = revealSecrets ? object.annotations : Unstructured(SecretMasking.masked(object.json)).annotations
-            if !annotations.isEmpty { KeyValueSection(title: "Annotations", values: annotations, collapsed: true) }
-            KindSpecificSections(object: object, revealSecrets: $revealSecrets) { action, container in
-                session.open(action, pod: object, container: container)
-            }
-            if MetricsChartsSection.supportedKinds.contains(object.kind ?? "") {
-                MetricsChartsSection(session: session, object: object)
-            }
-            ConditionsSection(conditions: object.json[path: "status", "conditions"]?.arrayValue ?? [])
         }
     }
 }

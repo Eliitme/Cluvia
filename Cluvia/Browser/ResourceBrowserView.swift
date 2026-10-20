@@ -76,23 +76,19 @@ struct ResourceBrowserView: View {
             }
     }
 
-    /// The table and, when shown, the selected object's detail panel. A plain split rather than the system inspector,
-    /// which runs up under the toolbar.
+    /// The table and, for a selected object, its detail panel.
     private func split(_ rows: [ResourceTableRow]) -> some View {
-        HSplitView {
+        let row = session.selectedObject.flatMap { key in rows.first { $0.id == key } }
+        return DetailPanelSplit(showsPanel: session.showInspector && row != nil) {
             table(rows)
                 .overlay { overlay(rowCount: rows.count) }
                 .safeAreaInset(edge: .bottom, spacing: 0) { phaseBanner }
-                .frame(minWidth: 360, maxWidth: .infinity, maxHeight: .infinity)
-            // Shown only for a selected object; an empty panel would take half the window for nothing.
-            if session.showInspector, let key = session.selectedObject, let row = rows.first(where: { $0.id == key }) {
+        } panel: {
+            if let row {
                 ResourceDetailView(session: session, kind: kind, row: row)
                     .id(row.id) // fresh model per object: never show the previous object's data or hide its error
-                    .frame(minWidth: 320, maxWidth: 560, maxHeight: .infinity)
             }
         }
-        // A split sizes to its children's ideal height; an empty state has none, which would shrink the whole browser.
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private func table(_ rows: [ResourceTableRow]) -> ResourceTableView {

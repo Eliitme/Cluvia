@@ -24,17 +24,13 @@ struct ResourceDetailView: View {
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 6) {
                 Text(row.object.name).font(.title3.weight(.semibold)).textSelection(.enabled).lineLimit(2)
-                Text(kind.kind + (row.object.namespace.map { " · \($0)" } ?? "")).foregroundStyle(.secondary)
-                HStack(spacing: 6) {
-                    ForEach(ResourceAction.available(for: kind)) { action in
-                        Button { session.request(action, kind: kind, key: row.id) } label: {
-                            Label(action.title, systemImage: action.symbol)
-                        }
-                        .help(action.title)
-                    }
+                HStack(spacing: 8) {
+                    Text(kind.kind + (row.object.namespace.map { " · \($0)" } ?? "")).foregroundStyle(.secondary)
+                    if let summary = model.object.flatMap(StatusSummary.init) { StatusBadge(summary: summary) }
                 }
-                .labelStyle(.iconOnly)
-                .controlSize(.small)
+                ResourceActionBar(actions: ResourceAction.available(for: kind)) { action in
+                    session.request(action, kind: kind, key: row.id)
+                }
                 Picker("", selection: $tab) {
                     ForEach(Tab.allCases) { Text($0.rawValue).tag($0) }
                 }

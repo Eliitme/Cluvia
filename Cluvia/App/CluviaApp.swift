@@ -15,7 +15,10 @@ struct CluviaApp: App {
                 .task { openLaunchContext() }
         }
         .defaultSize(width: 1280, height: 800)
-        .commands { BrowserCommands() }
+        .commands {
+            BrowserCommands()
+            ObjectCommands()
+        }
     }
 
     /// Debug-only: `-CluviaOpenContext <name>` opens a cluster window at launch for automated UI checks.
