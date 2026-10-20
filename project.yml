@@ -1,0 +1,43 @@
+name: Cluvia
+options:
+  bundleIdPrefix: app.cluvia
+  deploymentTarget:
+    macOS: "14.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    SWIFT_STRICT_CONCURRENCY: complete
+    MACOSX_DEPLOYMENT_TARGET: "14.0"
+packages:
+  KubeKit:
+    path: Packages/KubeKit
+  HelmKit:
+    path: Packages/HelmKit
+targets:
+  Cluvia:
+    type: application
+    platform: macOS
+    sources: [Cluvia]
+    dependencies:
+      - package: KubeKit
+      - package: HelmKit
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.cluvia.Cluvia
+        PRODUCT_NAME: Cluvia
+        MARKETING_VERSION: 0.1.0
+        CURRENT_PROJECT_VERSION: 1
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: Cluvia
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.developer-tools
+        INFOPLIST_KEY_NSHumanReadableCopyright: ""
+        ENABLE_HARDENED_RUNTIME: YES
+        ENABLE_APP_SANDBOX: NO
+        CODE_SIGN_IDENTITY: "-"
+        CODE_SIGN_STYLE: Manual
+      configs:
+        Release:
+          # Xcode skips the runtime flag for ad-hoc signatures; force it so unsigned release builds still
+          # exercise hardened-runtime behavior. Debug keeps the default so the preview dylib can load.
+          OTHER_CODE_SIGN_FLAGS: "--options=runtime"
