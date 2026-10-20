@@ -37,16 +37,19 @@ jobs:
           - language: actions
             build-mode: none
             runner: ubuntu-latest
+          # Intel: CodeQL traces Swift builds as x86_64. On Apple silicon that means Rosetta, where the build is
+          # emulated (20+ minutes) and the Metal shader compiler SwiftTerm needs is unavailable.
           - language: swift
             build-mode: manual
-            runner: macos-26
+            runner: macos-15-intel
     steps:
       - uses: actions/checkout@v7
-      # Everything but the compile happens before CodeQL starts tracing: its tracer runs commands under Rosetta,
-      # where Homebrew refuses to install and package resolution takes minutes.
+      # Everything but the compile happens before CodeQL starts tracing builds.
       - name: Tools and dependencies
         if: matrix.build-mode == 'manual'
         run: |
+          sudo xcode-select -s "$(ls -d /Applications/Xcode_26*.app | sort -V | tail -1)"
+          xcodebuild -version
           brew install xcodegen
           xcodebuild -downloadComponent MetalToolchain
           xcodegen generate
