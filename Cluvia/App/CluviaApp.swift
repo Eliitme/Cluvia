@@ -47,6 +47,14 @@ struct BrowserCommands: Commands {
             Button("Refresh") { session?.refresh() }
                 .keyboardShortcut("r")
                 .disabled(session == nil)
+            Button("Command Palette…") { session?.showPalette = true }
+                .keyboardShortcut("k")
+                .disabled(session == nil)
+            Button(session?.dock.isVisible == true ? "Hide Bottom Panel" : "Show Bottom Panel") {
+                session?.dock.isVisible.toggle()
+            }
+            .keyboardShortcut("j")
+            .disabled(session == nil)
             Divider()
             ForEach(Array(ResourceCategory.allCases.enumerated()), id: \.element) { index, category in
                 Button("Show \(category.rawValue)") {

@@ -109,4 +109,9 @@ public final class ResourceStoreRegistry {
     }
 
     var activeCount: Int { entries.count }
+
+    /// Collections currently being watched, e.g. for searching loaded objects by name.
+    public var activeStores: [(gvr: GroupVersionResource, namespace: String?, store: ResourceStore<ResourceTableRow>)] {
+        entries.map { ($0.key.gvr, $0.key.namespace, $0.value.store) }
+    }
 }

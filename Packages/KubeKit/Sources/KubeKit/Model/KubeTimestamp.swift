@@ -6,6 +6,7 @@ public enum KubeTimestamp {
     private static let fractional = Date.ISO8601FormatStyle(includingFractionalSeconds: true)
 
     public static func parse(_ value: String) -> Date? {
-        (try? plain.parse(value)) ?? (try? fractional.parse(value))
+        // Kubelet log and event timestamps carry fractional seconds; object timestamps do not.
+        value.contains(".") ? (try? fractional.parse(value)) ?? (try? plain.parse(value)) : (try? plain.parse(value))
     }
 }

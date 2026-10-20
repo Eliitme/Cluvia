@@ -21,6 +21,14 @@ final class ClusterSession {
         didSet { if selectedKind != oldValue { selectedObject = nil } }
     }
     var selectedObject: ObjectKey?
+    let dock = DockModel()
+    /// Sheets driven from menus, the inspector and the command palette.
+    var pendingAction: PendingAction?
+    var editModel: YamlEditModel?
+    var actionError: String?
+    var showPalette = false
+    /// Command chosen in the palette, run once the palette sheet has closed.
+    var paletteCommand: PaletteItem.Command?
     var selectedNamespaces: Set<String> {
         didSet { settings.setNamespaces(selectedNamespaces, for: contextName) }
     }
@@ -68,7 +76,14 @@ final class ClusterSession {
         }
     }
 
+    /// Server-side apply against this cluster; nil until connected.
+    var applier: ResourceApplier? {
+        guard let client, let catalog else { return nil }
+        return ResourceApplier(client: client, catalog: catalog)
+    }
+
     func disconnect() {
+        dock.closeAll()
         registry?.releaseAll()
         registry = nil
         namespaceStore = nil

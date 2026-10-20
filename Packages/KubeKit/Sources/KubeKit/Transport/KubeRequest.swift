@@ -24,20 +24,38 @@ public struct KubeRequest: Sendable {
 
 /// Non-2xx response, decoded from the API server's `Status` object when possible.
 public struct KubeAPIError: Error, LocalizedError, Sendable {
+    /// One entry of `Status.details.causes`, e.g. a field owned by another manager in an apply conflict.
+    public struct Cause: Sendable, Hashable {
+        public let field: String?
+        public let message: String
+    }
+
     public let statusCode: Int
     public let reason: String?
     public let message: String
+    public let causes: [Cause]
 
     public var errorDescription: String? { "\(statusCode)\(reason.map { " \($0)" } ?? ""): \(message)" }
 
     init(statusCode: Int, body: Data) {
         struct Status: Decodable {
+            struct Details: Decodable {
+                struct RawCause: Decodable {
+                    var field: String?
+                    var message: String?
+                }
+
+                var causes: [RawCause]?
+            }
+
             var reason: String?
             var message: String?
+            var details: Details?
         }
         let status = try? JSONDecoder().decode(Status.self, from: body)
         self.statusCode = statusCode
         reason = status?.reason
+        causes = (status?.details?.causes ?? []).map { Cause(field: $0.field, message: $0.message ?? "") }
         let text = String(decoding: body.prefix(2048), as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
         message = status?.message ?? (text.isEmpty ? HTTPURLResponse.localizedString(forStatusCode: statusCode) : text)
     }

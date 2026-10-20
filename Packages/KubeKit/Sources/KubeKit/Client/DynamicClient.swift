@@ -104,14 +104,18 @@ public struct DynamicClient: Sendable {
         ))
     }
 
-    /// Server-side apply of a full manifest (YAML or JSON). `force` takes ownership of conflicting fields.
+    /// Server-side apply of a full manifest (YAML or JSON). `force` takes ownership of conflicting fields;
+    /// `dryRun` runs admission and defaulting and returns the result without persisting it.
     public func apply(
-        _ gvr: GroupVersionResource, name: String, namespace: String? = nil, manifest: Data, force: Bool = false
+        _ gvr: GroupVersionResource, name: String, namespace: String? = nil, manifest: Data,
+        force: Bool = false, dryRun: Bool = false
     ) async throws -> Unstructured {
-        try await object(KubeRequest(
+        var query = [fieldManagerItem]
+        if force { query.append(URLQueryItem(name: "force", value: "true")) }
+        if dryRun { query.append(URLQueryItem(name: "dryRun", value: "All")) }
+        return try await object(KubeRequest(
             method: "PATCH", path: gvr.path(namespace: namespace, name: name),
-            query: [fieldManagerItem] + (force ? [URLQueryItem(name: "force", value: "true")] : []),
-            body: manifest, contentType: PatchType.apply.rawValue
+            query: query, body: manifest, contentType: PatchType.apply.rawValue
         ))
     }
 

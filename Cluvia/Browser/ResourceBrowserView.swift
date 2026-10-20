@@ -42,7 +42,12 @@ struct ResourceBrowserView: View {
 
     var body: some View {
         let rows = visibleRows
-        ResourceTableView(columns: columns, rows: rows, showNamespace: showNamespace, selection: $session.selectedObject)
+        ResourceTableView(
+            columns: columns, rows: rows, showNamespace: showNamespace, selection: $session.selectedObject,
+            actions: ResourceAction.available(for: kind)
+        ) { action, row in
+            session.request(action, kind: kind, key: row.id)
+        }
             .overlay { overlay(rowCount: rows.count) }
             .safeAreaInset(edge: .bottom, spacing: 0) { phaseBanner }
             .inspector(isPresented: $showInspector) {
@@ -58,6 +63,10 @@ struct ResourceBrowserView: View {
             }
             .searchable(text: $filter, placement: .toolbar, prompt: "Filter (name, label, status:running)")
             .toolbar {
+                ToolbarItem {
+                    Button { session.createResource(of: kind) } label: { Label("New \(kind.kind)", systemImage: "plus") }
+                        .help("New \(kind.kind) from template")
+                }
                 ToolbarItem { if kind.namespaced { NamespacePicker(session: session) } }
                 ToolbarItem {
                     Button { showInspector.toggle() } label: { Label("Details", systemImage: "sidebar.right") }

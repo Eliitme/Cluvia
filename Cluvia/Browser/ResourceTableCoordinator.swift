@@ -10,10 +10,12 @@ final class ResourceTableCoordinator: NSObject, NSTableViewDataSource, NSTableVi
 
     weak var tableView: NSTableView?
     var selection: Binding<ObjectKey?>
+    var actions: [ResourceAction] = []
+    var onAction: (ResourceAction, ResourceTableRow) -> Void = { _, _ in }
     private var columns: [ResourceTableColumn] = []
     private var showNamespace = false
     private var rows: [ResourceTableRow] = []
-    private var sorted: [ResourceTableRow] = []
+    private(set) var sorted: [ResourceTableRow] = []
     private var applyingSelection = false
     private var ageTimer: Timer?
 

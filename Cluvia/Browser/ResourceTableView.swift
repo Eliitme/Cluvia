@@ -9,6 +9,9 @@ struct ResourceTableView: NSViewRepresentable {
     let rows: [ResourceTableRow]
     let showNamespace: Bool
     @Binding var selection: ObjectKey?
+    /// Context-menu actions for a row.
+    var actions: [ResourceAction] = []
+    var onAction: (ResourceAction, ResourceTableRow) -> Void = { _, _ in }
 
     func makeCoordinator() -> ResourceTableCoordinator {
         ResourceTableCoordinator(selection: $selection)
@@ -26,6 +29,9 @@ struct ResourceTableView: NSViewRepresentable {
         table.dataSource = context.coordinator
         table.delegate = context.coordinator
         context.coordinator.tableView = table
+        let menu = NSMenu()
+        menu.delegate = context.coordinator
+        table.menu = menu
 
         let scroll = NSScrollView()
         scroll.documentView = table
@@ -37,6 +43,8 @@ struct ResourceTableView: NSViewRepresentable {
 
     func updateNSView(_ scroll: NSScrollView, context: Context) {
         context.coordinator.selection = $selection
+        context.coordinator.actions = actions
+        context.coordinator.onAction = onAction
         context.coordinator.update(columns: columns, rows: rows, showNamespace: showNamespace, selected: selection)
     }
 

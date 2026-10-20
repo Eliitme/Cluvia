@@ -60,7 +60,7 @@ struct ClusterWindow: View {
         applyLaunchArguments(to: session)
     }
 
-    /// Debug-only deep link used by automated UI checks: `-CluviaNamespace ns -CluviaKind pods -CluviaObject name`.
+    /// Debug-only deep link used by automated UI checks: `-CluviaNamespace ns -CluviaKind pods -CluviaObject name -CluviaAction logs`.
     private func applyLaunchArguments(to session: ClusterSession) {
         #if DEBUG
         let defaults = UserDefaults.standard
@@ -72,6 +72,13 @@ struct ClusterWindow: View {
         }
         if let name = defaults.string(forKey: "CluviaObject") {
             session.selectedObject = ObjectKey(namespace: session.selectedNamespaces.first, name: name)
+        }
+        if let value = defaults.string(forKey: "CluviaAction") {
+            if value == "palette" {
+                session.showPalette = true
+            } else if let action = ResourceAction(rawValue: value), let kind = session.selectedKind, let key = session.selectedObject {
+                session.request(action, kind: kind, key: key)
+            }
         }
         #endif
     }

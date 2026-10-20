@@ -10,6 +10,9 @@ settings:
     SWIFT_STRICT_CONCURRENCY: complete
     MACOSX_DEPLOYMENT_TARGET: "14.0"
 packages:
+  STTextView:
+    url: https://github.com/krzyzanowskim/STTextView
+    from: 2.4.1
   KubeKit:
     path: Packages/KubeKit
   HelmKit:
@@ -22,6 +25,8 @@ targets:
     dependencies:
       - package: KubeKit
       - package: HelmKit
+      - package: STTextView
+        product: STTextView
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.cluvia.Cluvia

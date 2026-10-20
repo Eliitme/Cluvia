@@ -25,6 +25,16 @@ struct ResourceDetailView: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text(row.object.name).font(.title3.weight(.semibold)).textSelection(.enabled).lineLimit(2)
                 Text(kind.kind + (row.object.namespace.map { " · \($0)" } ?? "")).foregroundStyle(.secondary)
+                HStack(spacing: 6) {
+                    ForEach(ResourceAction.available(for: kind)) { action in
+                        Button { session.request(action, kind: kind, key: row.id) } label: {
+                            Label(action.title, systemImage: action.symbol)
+                        }
+                        .help(action.title)
+                    }
+                }
+                .labelStyle(.iconOnly)
+                .controlSize(.small)
                 Picker("", selection: $tab) {
                     ForEach(Tab.allCases) { Text($0.rawValue).tag($0) }
                 }
