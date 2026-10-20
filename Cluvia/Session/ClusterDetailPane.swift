@@ -23,8 +23,29 @@ struct ClusterDetailPane: View {
                 ClusterBrowserView(session: session)
             }
         }
+        // Applied at the detail column's root so the toolbar gets its own section above the inspector.
+        .inspector(isPresented: inspectorShown) {
+            Group {
+                if let row = session.inspectedRow, let kind = session.selectedKind, row.id == session.selectedObject {
+                    ResourceDetailView(session: session, kind: kind, row: row)
+                        .id(row.id) // fresh model per object: never show the previous object's data or hide its error
+                } else {
+                    ContentUnavailableView("No Selection", systemImage: "sidebar.right")
+                }
+            }
+            .inspectorColumnWidth(min: 320, ideal: 420, max: 700)
+        }
         .navigationTitle(session.contextName)
         .focusedSceneValue(\.clusterSession, session)
+    }
+}
+
+extension ClusterDetailPane {
+    /// Only resource tables have an inspector (not Helm, and not before connecting).
+    private var inspectorShown: Binding<Bool> {
+        Binding {
+            session.showInspector && session.state == .connected && !session.showingHelm
+        } set: { session.showInspector = $0 }
     }
 }
 

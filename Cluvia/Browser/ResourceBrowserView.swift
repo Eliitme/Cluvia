@@ -8,7 +8,6 @@ struct ResourceBrowserView: View {
     /// One store per watched scope (all namespaces, or each selected namespace).
     @State private var stores: [ResourceStore<ResourceTableRow>] = []
     @State private var filter = ""
-    @State private var showInspector = false
     @State private var usage = LiveUsageModel()
 
     private var showsUsage: Bool { session.metricsAvailable && LiveUsageModel.supports(kind) }
@@ -48,17 +47,6 @@ struct ResourceBrowserView: View {
         table(rows)
             .overlay { overlay(rowCount: rows.count) }
             .safeAreaInset(edge: .bottom, spacing: 0) { phaseBanner }
-            .inspector(isPresented: $showInspector) {
-                Group {
-                    if let key = session.selectedObject, let row = rows.first(where: { $0.id == key }) {
-                        ResourceDetailView(session: session, kind: kind, row: row)
-                            .id(row.id) // fresh model per object: never show the previous object's data or hide its error
-                    } else {
-                        ContentUnavailableView("No Selection", systemImage: "sidebar.right")
-                    }
-                }
-                .inspectorColumnWidth(min: 320, ideal: 420, max: 700)
-            }
             .searchable(text: $filter, placement: .toolbar, prompt: "Filter (name, label, status:running)")
             .toolbar {
                 ToolbarItem {
@@ -67,13 +55,17 @@ struct ResourceBrowserView: View {
                 }
                 ToolbarItem { if kind.namespaced { NamespacePicker(session: session) } }
                 ToolbarItem {
-                    Button { showInspector.toggle() } label: { Label("Details", systemImage: "sidebar.right") }
+                    Button { session.showInspector.toggle() } label: { Label("Details", systemImage: "sidebar.right") }
                         .keyboardShortcut("i", modifiers: [.command, .option])
                 }
             }
             .navigationSubtitle("\(kind.title) · \(rows.count)")
             .onChange(of: session.selectedObject, initial: true) { _, selected in
-                if selected != nil { showInspector = true }
+                if selected != nil { session.showInspector = true }
+            }
+            // The inspector lives at the window's detail root (so the toolbar makes room for it); it shows this row.
+            .onChange(of: session.selectedObject.flatMap { key in rows.first { $0.id == key } }, initial: true) { _, row in
+                session.inspectedRow = row
             }
             .task(id: scopes) {
                 guard showsUsage, let client = session.client else { return }

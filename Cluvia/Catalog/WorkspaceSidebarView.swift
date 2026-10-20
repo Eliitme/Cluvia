@@ -87,6 +87,9 @@ struct WorkspaceSidebarView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
+        // Opaque, so rows scrolled underneath never show through the buttons.
+        .background(.bar)
+        .overlay(alignment: .top) { Divider() }
     }
 
     private var selection: Binding<SidebarItem?> {
