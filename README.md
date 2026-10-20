@@ -1,85 +1,97 @@
-# Cluvia
+<p align="center">
+  <img src="Brand/cluvia-logo.svg#gh-light-mode-only" alt="Cluvia" width="420">
+  <img src="Brand/cluvia-logo-dark.svg#gh-dark-mode-only" alt="Cluvia" width="420">
+</p>
 
-Native macOS app for working with Kubernetes clusters.
+<p align="center"><strong>A clear view of your Kubernetes world.</strong><br>
+A fast, native macOS app to explore, understand and manage your clusters.</p>
+
+<p align="center">
+  <a href="https://github.com/Eliitme/Cluvia/actions/workflows/ci.yml"><img src="https://github.com/Eliitme/Cluvia/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/Eliitme/Cluvia/releases"><img src="https://img.shields.io/github/v/release/Eliitme/Cluvia?include_prereleases&label=release" alt="Release"></a>
+  <img src="https://img.shields.io/badge/macOS-14%2B-0F172A?logo=apple" alt="macOS 14+">
+  <img src="https://img.shields.io/badge/Swift-6-F05138?logo=swift&logoColor=white" alt="Swift 6">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-PolyForm%20Noncommercial-2563EB" alt="License: PolyForm Noncommercial 1.0.0"></a>
+  <a href="https://github.com/sponsors/Eliitme"><img src="https://img.shields.io/github/sponsors/Eliitme?label=sponsors&color=14B8A6" alt="Sponsors"></a>
+</p>
+
+<p align="center">
+  <img src=".github/assets/screenshot-browser.png" alt="Cluvia showing deployments with the detail panel" width="900">
+</p>
+
+## Features
+
+- **Native and light.** SwiftUI and AppKit, no Electron. Watches thousands of objects with a small memory footprint.
+- **All your clusters in one sidebar.** Every context from your kubeconfig, grouped by file, with favorites,
+  connection state and per-cluster color badges. Keep several clusters connected and switch instantly.
+- **Live resource browser.** Every built-in kind and your CRDs, kept up to date with watches, with filters
+  (`name`, `label=value`, `status:running`), namespace selection and CPU/memory columns from metrics-server.
+- **Detail panel.** Status at a glance, conditions, containers, usage charts (from Prometheus), YAML and events.
+- **Actions.** Logs (one pod or a whole workload), shell, port-forward, edit YAML with diff and dry run
+  (server-side apply), scale, restart, cordon, drain, node shell and delete, each with a keyboard shortcut.
+- **Built-in terminal and logs.** Shells and port-forwards run inside the app over the Kubernetes API:
+  no `kubectl` required. Logs highlight errors and warnings.
+- **Kubeconfig editing.** Add contexts by form, from a file or by pasting YAML; edit, rename, delete and set the
+  current context. Edits go to the file that defines each entry, keep fields Cluvia does not know about, and save a
+  backup first.
+- **Helm.** Browse releases, values, manifests and history (needs the `helm` CLI).
+- **Command palette** (⌘K) to jump to any kind, namespace, object or cluster.
+
+<p align="center">
+  <img src=".github/assets/screenshot-logs.png" alt="Cluvia streaming pod logs in the bottom panel" width="900">
+</p>
 
 ## Install
 
-Download the DMG, drag Cluvia to Applications. Requires macOS 14 or later.
+Download the latest DMG from [Releases](https://github.com/Eliitme/Cluvia/releases) and drag Cluvia to
+Applications. Requires macOS 14 or later.
 
-- Reads your kubeconfig (`~/.kube/config` or `KUBECONFIG`); it never writes to it.
-- Shells, logs and port-forwards run inside the app: no `kubectl` needed.
-- Credential plugins (cloud CLIs, OIDC helpers) are run from your login shell's `PATH`.
+- Cluvia reads your kubeconfig (`~/.kube/config` or the `KUBECONFIG` list, as `kubectl` does).
+- Credential plugins (cloud CLIs, OIDC helpers) run from your login shell's `PATH`.
 - `helm` is optional; without it the Helm section shows an install hint.
 - CPU/memory columns need metrics-server; usage charts use an in-cluster Prometheus (detected, or set per cluster).
 
-## Development
+### About kubeconfig changes
 
-Requires Xcode 26+.
+Cluvia only writes to your kubeconfig when you add, edit, import or delete a context, or set the current context.
+Before each write it takes the same lock as `kubectl`, refuses to overwrite a file that changed on disk, and keeps a
+timestamped backup next to the file (`config.cluvia-backup-…`). Comments in the file are not preserved.
 
-## Layout
-
-```
-Cluvia/              SwiftUI app target
-Packages/KubeKit/    kubeconfig, auth, transport (no kubectl required)
-Packages/HelmKit/    optional helm CLI integration
-project.yml          Xcode project definition (XcodeGen)
-```
-
-## Build
+## Build from source
 
 ```sh
 brew install xcodegen
-xcodebuild -downloadComponent MetalToolchain   # once; the terminal renderer ships Metal shaders
+xcodebuild -downloadComponent MetalToolchain
 xcodegen generate
-open Cluvia.xcodeproj                          # trust the SwiftTerm build plugin when Xcode asks
+open Cluvia.xcodeproj
 ```
 
-Command-line builds need `-skipPackagePluginValidation` for the same plugin:
+See [CONTRIBUTING.md](CONTRIBUTING.md) for tests, project layout and release packaging.
 
-```sh
-xcodebuild -project Cluvia.xcodeproj -scheme Cluvia -skipPackagePluginValidation build
-```
+## Contributing
 
-`Cluvia.xcodeproj` is generated and not committed; edit `project.yml` instead.
+Issues, ideas and pull requests are welcome. Please read the [contributing guide](CONTRIBUTING.md) and the
+[code of conduct](CODE_OF_CONDUCT.md). Report security issues privately as described in [SECURITY.md](SECURITY.md).
 
-## Tests
+Thanks to everyone who has contributed:
 
-```sh
-cd Packages/KubeKit && swift test
-cd Packages/HelmKit && swift test
-```
+<a href="https://github.com/Eliitme/Cluvia/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=Eliitme/Cluvia" alt="Contributors">
+</a>
 
-Integration tests run against a real cluster when `CLUVIA_IT_CONTEXT` names a kubeconfig context:
+## Support the project
 
-```sh
-kind create cluster --name cluvia-dev
-cd Packages/KubeKit
-CLUVIA_IT_CONTEXT=kind-cluvia-dev swift test
-# long watch check (default 20s)
-CLUVIA_IT_CONTEXT=kind-cluvia-dev CLUVIA_IT_WATCH_SECONDS=310 swift test --filter watchStreamStaysOpen
-```
+Cluvia is built in spare time. If it saves you time, consider supporting its development:
 
-CI: `.github/workflows/ci.yml` runs unit tests and the app build on every push.
-`.github/workflows/integration.yml` runs the cluster suites on a self-hosted macOS runner with Docker.
+- [GitHub Sponsors](https://github.com/sponsors/Eliitme)
+- [Buy Me a Coffee](https://www.buymeacoffee.com/Eliitme)
+- [Ko-fi](https://ko-fi.com/Eliitme)
 
-The integration suite creates a `cluvia-it-echo` busybox pod in `default` and objects in the `cluvia-it` namespace.
+## License
 
-Opt-in checks:
+Cluvia is source-available under the [PolyForm Noncommercial License 1.0.0](LICENSE): you may use, study, modify
+and share it for any noncommercial purpose. Commercial use requires a separate license; please
+[get in touch](mailto:levanlong220700@gmail.com).
 
-```sh
-# API server restart recovery (kind only; restarts the node container, run it alone)
-CLUVIA_IT_CONTEXT=kind-cluvia-dev CLUVIA_IT_DISRUPT=1 swift test --filter recoversAfterApiServerRestart
-# memory of 5 idle shells + 5 port-forwards
-CLUVIA_IT_CONTEXT=kind-cluvia-dev CLUVIA_IT_FOOTPRINT=1 swift test -c release --filter StreamingFootprint
-# 5k-pod list/memory budget against a namespace holding ~5000 pods
-CLUVIA_IT_CONTEXT=kind-cluvia-dev CLUVIA_IT_SCALE_NAMESPACE=cluvia-scale swift test -c release --filter WatchCacheScale
-```
-
-## Release
-
-```sh
-DEVELOPMENT_TEAM=<team id> NOTARY_PROFILE=<notarytool keychain profile> scripts/build-release.sh
-```
-
-Produces `build/release/Cluvia-<version>.dmg`, signed with the team's Developer ID, notarized and stapled.
-`SKIP_NOTARIZE=1` signs and packages without notarizing. Signing material stays in the keychain; nothing secret lives in the repository.
+Brand assets (logo, icon) in `Brand/` identify the official project; please do not use them for forks or other
+products. The wordmark is set in [Outfit](https://github.com/Outfitio/Outfit-Fonts) (SIL Open Font License 1.1).

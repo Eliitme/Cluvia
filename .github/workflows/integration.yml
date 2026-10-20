@@ -2,10 +2,9 @@ name: Integration
 
 # Runs the suites that talk to a real cluster. Hosted macOS runners cannot run Docker, so this needs a
 # self-hosted macOS runner labelled `docker` with Docker, kind and helm installed.
+# Manual only: a public repository must not hand its self-hosted runner to scheduled or pull request runs.
 on:
   workflow_dispatch:
-  schedule:
-    - cron: "0 3 * * 1"
 
 jobs:
   kind:
