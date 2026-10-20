@@ -1,9 +1,15 @@
 name: CI
 
+# Pushes to main, and pull requests (development reaches main through one, so it is tested there once).
 on:
   push:
-    branches: [main, development]
+    branches: [main]
   pull_request:
+
+# A newer push to the same branch or pull request replaces a run still in progress.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build-and-test:
