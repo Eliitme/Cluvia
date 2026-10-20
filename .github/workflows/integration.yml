@@ -14,7 +14,7 @@ jobs:
       CLUSTER: cluvia-ci
       CLUVIA_IT_CONTEXT: kind-cluvia-ci
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Cluster
         run: |
           kind get clusters | grep -qx "$CLUSTER" || kind create cluster --name "$CLUSTER" --wait 120s
