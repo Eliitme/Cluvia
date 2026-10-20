@@ -85,7 +85,7 @@ Cluvia is built in spare time. If it saves you time, consider supporting its dev
 
 - [GitHub Sponsors](https://github.com/sponsors/Eliitme)
 - [Buy Me a Coffee](https://www.buymeacoffee.com/Eliitme)
-- [Ko-fi](https://ko-fi.com/Eliitme)
+- [Ko-fi](https://ko-fi.com/EliitmeVN)
 
 ## License
 
