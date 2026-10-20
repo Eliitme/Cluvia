@@ -6,6 +6,9 @@ name: Integration
 on:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   kind:
     runs-on: [self-hosted, macOS, docker]

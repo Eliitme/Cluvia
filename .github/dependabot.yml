@@ -4,3 +4,10 @@ updates:
     directory: /
     schedule:
       interval: monthly
+  # Swift packages with remote dependencies (app-level packages are declared in project.yml).
+  - package-ecosystem: swift
+    directories:
+      - /Packages/KubeKit
+      - /Packages/HelmKit
+    schedule:
+      interval: monthly

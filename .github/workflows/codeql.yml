@@ -1,0 +1,63 @@
+name: CodeQL
+
+# Swift is scanned in the KubeKit and HelmKit packages, where the security-sensitive code lives (authentication, TLS,
+# kubeconfig writing, running credential plugins). The app target cannot be built under CodeQL's tracer: it compiles
+# SwiftTerm's Metal shaders, and the Metal compiler is unavailable there.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths-ignore:
+      - "**/*.md"
+      - ".github/assets/**"
+      - "Brand/**"
+  schedule:
+    - cron: "27 4 * * 1"
+
+concurrency:
+  group: codeql-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: actions
+            build-mode: none
+            runner: ubuntu-latest
+          # Intel: CodeQL traces Swift builds as x86_64, which on Apple silicon runs emulated under Rosetta.
+          - language: swift
+            build-mode: manual
+            runner: macos-15-intel
+    steps:
+      - uses: actions/checkout@v7
+      # Everything but the compile happens before CodeQL starts tracing builds.
+      - name: Toolchain and dependencies
+        if: matrix.build-mode == 'manual'
+        run: |
+          sudo xcode-select -s "$(ls -d /Applications/Xcode_26*.app | sort -V | tail -1)"
+          swift --version
+          swift package resolve --package-path Packages/HelmKit
+      - uses: github/codeql-action/init@v4
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+      - name: Build
+        if: matrix.build-mode == 'manual'
+        # HelmKit depends on KubeKit, so this compiles both packages.
+        run: swift build --package-path Packages/HelmKit
+      - uses: github/codeql-action/analyze@v4
+        with:
+          category: /language:${{ matrix.language }}
