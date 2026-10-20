@@ -21,9 +21,11 @@ struct NamespacePicker: View {
                 ))
             }
         } label: {
-            Label(title, systemImage: "square.stack.3d.up")
+            // The name, not just an icon: which namespaces are shown should be visible without opening the menu.
+            Label(title, systemImage: "square.stack.3d.up").labelStyle(.titleAndIcon)
         }
-        .help("Namespaces")
+        .fixedSize()
+        .help("Namespaces shown")
     }
 
     private var title: String {

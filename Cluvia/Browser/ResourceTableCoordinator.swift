@@ -144,9 +144,9 @@ final class ResourceTableCoordinator: NSObject, NSTableViewDataSource, NSTableVi
         guard let tableColumn, row < sorted.count else { return nil }
         let cell = (tableView.makeView(withIdentifier: Self.cellIdentifier, owner: self) as? NSTableCellView) ?? Self.makeCell()
         let value = text(for: sorted[row], column: tableColumn.identifier)
-        cell.textField?.stringValue = value
-        cell.textField?.textColor = StatusTone.of(value, column: tableColumn.title).color
-        cell.textField?.toolTip = value.count > 40 ? value : nil
+        let shown = TableCellPresentation.present(value, column: tableColumn.title, font: cell.textField?.font ?? .systemFont(ofSize: NSFont.systemFontSize))
+        cell.textField?.attributedStringValue = shown.text
+        cell.textField?.toolTip = shown.tooltip
         return cell
     }
 
