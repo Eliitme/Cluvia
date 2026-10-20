@@ -16,14 +16,14 @@ final class TerminalSessionModel: Identifiable {
     let title: String
     private(set) var status = Status.connecting
     @ObservationIgnored let terminalView: TerminalView
-    @ObservationIgnored private let session: ExecSession
+    /// Created once the terminal has its size (see `start`).
+    @ObservationIgnored private var session: ExecSession?
+    @ObservationIgnored private let makeSession: @Sendable (_ columns: Int, _ rows: Int) -> ExecSession
     @ObservationIgnored private var bridge: TerminalBridge?
     @ObservationIgnored private var task: Task<Void, Never>?
     @ObservationIgnored private var pendingResize: Task<Void, Never>?
     /// Size last sent to the shell. Each resize makes the shell redraw its prompt, so unchanged sizes are not resent.
     @ObservationIgnored private var sentSize: (columns: Int, rows: Int)?
-    /// Set once the terminal view has been laid out at its real size.
-    @ObservationIgnored private var laidOut = false
     /// Keystrokes go through one ordered queue; separate Tasks per keystroke could reach the session out of order.
     @ObservationIgnored private let input: AsyncStream<Data>.Continuation
     @ObservationIgnored private let inputStream: AsyncStream<Data>
@@ -38,8 +38,11 @@ final class TerminalSessionModel: Identifiable {
         self.title = title ?? "\(pod.name)\(container.map { "/\($0)" } ?? "")"
         self.onClose = onClose
         if let onClose { ShutdownCleanup.shared.register(id, onClose) }
-        session = ExecSession(transport: transport, namespace: pod.namespace ?? "default", pod: pod.name,
-                              container: container, command: command)
+        let namespace = pod.namespace ?? "default", podName = pod.name
+        makeSession = { columns, rows in
+            ExecSession(transport: transport, namespace: namespace, pod: podName, container: container,
+                        command: command == ExecSession.defaultShell ? ExecSession.defaultShell(columns: columns, rows: rows) : command)
+        }
         (inputStream, input) = AsyncStream.makeStream()
         terminalView = AppearanceTrackingTerminalView(frame: NSRect(x: 0, y: 0, width: 640, height: 320))
         terminalView.font = .monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
@@ -50,24 +53,27 @@ final class TerminalSessionModel: Identifiable {
     }
 
     private func start() {
-        let session = session
         let inputStream = inputStream
         task = Task { [weak self] in
+            // The shell starts at the terminal's real size: wait (briefly) until the view is laid out in a window;
+            // SwiftTerm reports its placeholder frame before that.
+            for _ in 0..<20 where self?.terminalView.window == nil { try? await Task.sleep(for: .milliseconds(50)) }
+            try? await Task.sleep(for: .milliseconds(30))
+            guard let self else { return }
+            let terminal = self.terminalView.getTerminal()
+            let (columns, rows) = (terminal.cols, terminal.rows)
+            let session = self.makeSession(columns, rows)
+            self.session = session
+            self.sentSize = (columns, rows)
             do {
                 try await session.start()
             } catch {
-                self?.finish(ExecSession.Exit(code: nil, message: error.localizedDescription))
+                self.finish(ExecSession.Exit(code: nil, message: error.localizedDescription))
                 return
             }
-            self?.status = .running
-            // The first size goes out once layout has settled (briefly waited for); sending the placeholder size
-            // first and the real one after made the shell print its prompt twice.
-            for _ in 0..<10 where self?.laidOut == false { try? await Task.sleep(for: .milliseconds(50)) }
-            if let self {
-                let terminal = self.terminalView.getTerminal()
-                self.sentSize = (terminal.cols, terminal.rows)
-                await session.resize(columns: terminal.cols, rows: terminal.rows)
-            }
+            self.status = .running
+            // Shells without stty get their size here; for the rest it matches and changes nothing.
+            await session.resize(columns: columns, rows: rows)
             // Typed-ahead input waits in the stream until the connection is up.
             let pump = Task { for await data in inputStream { await session.send(data) } }
             defer { pump.cancel() }
@@ -75,7 +81,7 @@ final class TerminalSessionModel: Identifiable {
                 // Awaiting the main actor per chunk throttles the socket to what the terminal can draw.
                 await self?.terminalView.feed(byteArray: ArraySlice([UInt8](data)))
             }
-            self?.finish(exit)
+            self.finish(exit)
         }
     }
 
@@ -91,14 +97,13 @@ final class TerminalSessionModel: Identifiable {
         input.yield(Data(bytes))
     }
 
-    /// Layout reports several sizes in a row; only the settled one is sent (each resize makes shells redraw).
+    /// Layout reports a stream of sizes while a panel is dragged; only the size it settles on is sent, since each
+    /// resize makes shells such as busybox print their prompt again.
     func resize(columns: Int, rows: Int) {
-        let session = session
-        laidOut = true
         pendingResize?.cancel()
         pendingResize = Task {
-            try? await Task.sleep(for: .milliseconds(150))
-            guard !Task.isCancelled, status == .running else { return }
+            try? await Task.sleep(for: .milliseconds(500))
+            guard !Task.isCancelled, status == .running, let session else { return }
             if let sent = sentSize, sent == (columns, rows) { return }
             sentSize = (columns, rows)
             await session.resize(columns: columns, rows: rows)
@@ -109,7 +114,7 @@ final class TerminalSessionModel: Identifiable {
         input.finish()
         let session = session, onClose = onClose, id = id
         Task {
-            await session.close()
+            await session?.close()
             await onClose?()
             // Unregistered only once done, so quitting right after closing the tab still waits for it.
             ShutdownCleanup.shared.unregister(id)

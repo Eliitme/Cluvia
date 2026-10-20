@@ -17,6 +17,13 @@ public actor ExecSession {
     /// Prefers bash, falls back to sh, without assuming either exists.
     public static let defaultShell = ["sh", "-c", "command -v bash >/dev/null && exec bash || exec sh"]
 
+    /// The default shell with the TTY already sized. The API has no initial size, and a resize that arrives after the
+    /// shell printed its prompt makes shells such as busybox print it again; `stty` sizes the TTY before the shell
+    /// starts, so the later resize (same size) is not a change. Shells without `stty` just start unsized.
+    public static func defaultShell(columns: Int, rows: Int) -> [String] {
+        ["sh", "-c", "stty cols \(columns) rows \(rows) 2>/dev/null; command -v bash >/dev/null && exec bash || exec sh"]
+    }
+
     private let transport: KubeTransport
     private let path: String
     private let query: [URLQueryItem]

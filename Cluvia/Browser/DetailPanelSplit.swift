@@ -1,4 +1,3 @@
-import AppKit
 import SwiftUI
 
 /// Content with a detail panel on the right whose width the user drags and the app remembers. A system split view
@@ -8,8 +7,6 @@ struct DetailPanelSplit<Content: View, Panel: View>: View {
     let content: Content
     let panel: Panel
     @AppStorage("detailPanelWidth") private var width = 380.0
-    @State private var dragStart: Double?
-    @State private var cursorPushed = false
 
     static var contentMinWidth: Double { 360 }
     static var widthRange: ClosedRange<Double> { 300...640 }
@@ -28,56 +25,11 @@ struct DetailPanelSplit<Content: View, Panel: View>: View {
             HStack(spacing: 0) {
                 content.frame(minWidth: Self.contentMinWidth, maxWidth: .infinity, maxHeight: .infinity)
                 if showsPanel {
-                    handle(current: shown, maxWidth: maxWidth)
+                    SplitResizeHandle(axis: .horizontal, current: shown, range: Self.widthRange.lowerBound...maxWidth,
+                                      label: "Details Panel Width") { width = $0 }
                     panel.frame(width: shown).frame(maxHeight: .infinity)
                 }
             }
         }
-    }
-
-    private func handle(current: Double, maxWidth: Double) -> some View {
-        Divider()
-            .overlay {
-                Color.clear
-                    .frame(width: 8)
-                    .contentShape(Rectangle())
-                    .onHover { inside in
-                        // While dragging the pointer may leave the strip; keep the resize cursor until the drag ends.
-                        if inside { pushCursor() } else if dragStart == nil { popCursor() }
-                    }
-                    .onDisappear { popCursor() }
-                    // Global coordinates: the handle itself moves as the width changes, which would skew local ones.
-                    .gesture(
-                        DragGesture(minimumDistance: 1, coordinateSpace: .global)
-                            .onChanged { drag in
-                                let start = dragStart ?? current
-                                dragStart = start
-                                width = min(max(start - drag.translation.width, Self.widthRange.lowerBound), maxWidth)
-                            }
-                            .onEnded { _ in
-                                dragStart = nil
-                                popCursor()
-                            }
-                    )
-            }
-            .accessibilityElement()
-            .accessibilityLabel("Details Panel Width")
-            .accessibilityValue("\(Int(current)) points")
-            .accessibilityAdjustableAction { direction in
-                let step = direction == .increment ? 40.0 : -40.0
-                width = min(max(current + step, Self.widthRange.lowerBound), maxWidth)
-            }
-    }
-
-    private func pushCursor() {
-        guard !cursorPushed else { return }
-        NSCursor.resizeLeftRight.push()
-        cursorPushed = true
-    }
-
-    private func popCursor() {
-        guard cursorPushed else { return }
-        NSCursor.pop()
-        cursorPushed = false
     }
 }

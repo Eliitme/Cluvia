@@ -36,6 +36,8 @@ struct DockView: View {
                 ContentUnavailableView("Nothing Open", systemImage: "rectangle.bottomhalf.inset.filled")
             }
         }
+        // Tabs stay at the top and the content fills the rest, whatever the content's own preferred height.
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 }
 
