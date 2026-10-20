@@ -23,10 +23,14 @@ final class LiveUsageModel {
                 if let usage = try? await metrics.nodeUsage() { nodes = usage }
             } else {
                 var merged: [ObjectKey: ResourceUsage] = [:]
+                var succeeded = false
                 for scope in scopes {
-                    if let usage = try? await metrics.podUsage(namespace: scope) { merged.merge(usage) { _, new in new } }
+                    if let usage = try? await metrics.podUsage(namespace: scope) {
+                        merged.merge(usage) { _, new in new }
+                        succeeded = true
+                    }
                 }
-                pods = merged
+                if succeeded { pods = merged }
             }
             version += 1
             try? await Task.sleep(for: Self.interval)

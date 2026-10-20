@@ -29,17 +29,6 @@ extension ClusterSession {
                 let pod = try await client.get(kind.gvr, name: key.name, namespace: key.namespace)
                 self.dock.openShell(transport: client.transport, pod: pod, container: nil)
             }
-        case .nodeShell:
-            run { client in
-                // kube-system is usually exempt from Pod Security admission, which rejects privileged pods elsewhere.
-                let namespace = "kube-system"
-                let name = try await NodeShellPod.create(client: client, node: key.name, namespace: namespace)
-                let pod = try await client.get(.pods, name: name, namespace: namespace)
-                self.dock.openShell(transport: client.transport, pod: pod, container: "shell", title: "node/\(key.name)",
-                                    command: NodeShellPod.command) {
-                    try? await client.delete(.pods, name: name, namespace: namespace, propagationPolicy: nil)
-                }
-            }
         case .edit:
             run { client in
                 guard let applier = self.applier else { return }
@@ -108,6 +97,8 @@ extension ClusterSession {
                 try await ResourceActions.restart(client, kind: pending.kind, key: pending.key)
             case .cordon, .uncordon:
                 try await ResourceActions.setSchedulable(client, kind: pending.kind, key: pending.key, schedulable: pending.action == .uncordon)
+            case .nodeShell:
+                try await openNodeShell(client: client, node: pending.key.name)
             default:
                 break
             }
@@ -132,6 +123,29 @@ extension ClusterSession {
         guard let client else { throw URLError(.notConnectedToInternet) }
         let object = try await client.get(pending.kind.gvr, name: pending.key.name, namespace: pending.key.namespace)
         return Int(object.json[path: "spec", "replicas"]?.intValue ?? 1)
+    }
+
+    /// Creates the helper pod and opens its shell. The pod is deleted on every path: failed start, window
+    /// already closed, tab closed, app quit.
+    private func openNodeShell(client: DynamicClient, node: String) async throws {
+        let namespace = NodeShellPod.namespace
+        let name = try await NodeShellPod.create(client: client, node: node, namespace: namespace)
+        let cleanup: @Sendable () async -> Void = {
+            try? await client.delete(.pods, name: name, namespace: namespace, propagationPolicy: nil)
+        }
+        let cleanupID = UUID()
+        ShutdownCleanup.shared.register(cleanupID, cleanup)
+        do {
+            guard self.client != nil else { throw CancellationError() }
+            let pod = try await client.get(.pods, name: name, namespace: namespace)
+            dock.openShell(transport: client.transport, pod: pod, container: "shell", title: "node/\(node)",
+                           command: NodeShellPod.command, onClose: cleanup)
+            ShutdownCleanup.shared.unregister(cleanupID) // the tab owns cleanup from here
+        } catch {
+            ShutdownCleanup.shared.unregister(cleanupID)
+            await cleanup()
+            throw error
+        }
     }
 
     private func run(_ work: @escaping @MainActor (DynamicClient) async throws -> Void) {

@@ -14,7 +14,7 @@ struct ConfirmActionSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Label("\(pending.action.title.replacingOccurrences(of: "…", with: "")) \(pending.kind.kind)?", systemImage: pending.action.symbol)
+            Label(title, systemImage: pending.action.symbol)
                 .font(.title3.weight(.semibold))
             TargetSummary(kind: pending.kind, key: pending.key, contextName: contextName)
             Text(explanation).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
@@ -44,12 +44,20 @@ struct ConfirmActionSheet: View {
         .frame(width: 460)
     }
 
+    private var title: String {
+        pending.action == .nodeShell
+            ? "Open a shell on this node?"
+            : "\(pending.action.title.replacingOccurrences(of: "…", with: "")) \(pending.kind.kind)?"
+    }
+
     private var explanation: String {
         switch pending.action {
         case .delete: "This cannot be undone."
         case .restart: "Pods are replaced according to the rollout strategy."
         case .cordon: "New pods will not be scheduled on this node. Running pods are not evicted."
         case .uncordon: "The node will accept new pods again."
+        case .nodeShell: "Creates a privileged pod (host PID, network and IPC) from \(NodeShellPod.image) in \(NodeShellPod.namespace) on this node, "
+            + "with root access to the host. The pod is deleted when the shell closes."
         default: ""
         }
     }

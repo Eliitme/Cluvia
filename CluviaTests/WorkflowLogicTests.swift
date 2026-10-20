@@ -60,7 +60,7 @@ struct ResourceActionTests {
         let deployment = Unstructured(.object(["spec": .object(["selector": .object(["matchLabels": .object(["app": .string("web")])])])]))
         #expect(ResourceActions.podSelector(of: deployment) == "app=web")
         #expect(ResourceAction.available(for: Self.kind("Node", namespaced: false)) == [.edit, .cordon, .uncordon, .drain, .nodeShell, .delete])
-        #expect(ResourceAction.allCases.filter(\.needsConfirmation) == [.restart, .cordon, .uncordon, .delete])
+        #expect(ResourceAction.allCases.filter(\.needsConfirmation) == [.restart, .cordon, .uncordon, .nodeShell, .delete])
     }
 
     @Test func templatesParseAsManifests() throws {

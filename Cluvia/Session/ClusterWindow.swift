@@ -76,7 +76,8 @@ struct ClusterWindow: View {
             session.selectedKind = kind
         }
         if let name = defaults.string(forKey: "CluviaObject") {
-            session.selectedObject = ObjectKey(namespace: session.selectedNamespaces.first, name: name)
+            let namespaced = session.selectedKind?.namespaced ?? true
+            session.selectedObject = ObjectKey(namespace: namespaced ? session.selectedNamespaces.first : nil, name: name)
         }
         if let value = defaults.string(forKey: "CluviaAction") {
             if value == "palette" {

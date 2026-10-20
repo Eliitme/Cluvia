@@ -28,15 +28,9 @@ final class TerminalSessionModel: Identifiable {
     /// Cleanup when the tab closes, e.g. deleting a node-shell helper pod.
     @ObservationIgnored private let onClose: (@Sendable () async -> Void)?
 
-    /// The container `kubectl exec` would pick: the default-container annotation, else the first container.
-    static func defaultContainer(of pod: Unstructured) -> String? {
-        pod.annotations["kubectl.kubernetes.io/default-container"]
-            ?? pod.json[path: "spec", "containers"]?.arrayValue?.first?["name"]?.stringValue
-    }
-
     init(transport: KubeTransport, pod: Unstructured, container: String?, title: String? = nil,
          command: [String] = ExecSession.defaultShell, onClose: (@Sendable () async -> Void)? = nil) {
-        let container = container ?? Self.defaultContainer(of: pod)
+        let container = container ?? pod.defaultContainerName
         self.title = title ?? "\(pod.name)\(container.map { "/\($0)" } ?? "")"
         self.onClose = onClose
         if let onClose { ShutdownCleanup.shared.register(id, onClose) }
@@ -101,11 +95,12 @@ final class TerminalSessionModel: Identifiable {
 
     func stop() {
         input.finish()
-        let session = session, onClose = onClose
-        ShutdownCleanup.shared.unregister(id)
+        let session = session, onClose = onClose, id = id
         Task {
             await session.close()
             await onClose?()
+            // Unregistered only once done, so quitting right after closing the tab still waits for it.
+            ShutdownCleanup.shared.unregister(id)
         }
     }
 }

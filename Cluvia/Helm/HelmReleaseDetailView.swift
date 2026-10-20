@@ -34,7 +34,8 @@ struct HelmReleaseDetailView: View {
                     Text(release.name).font(.title3.weight(.semibold))
                     Text("\(release.chart) · \(release.namespace) · revision \(release.revision)").foregroundStyle(.secondary)
                     HStack {
-                        Button("Upgrade…") { sheet = .upgrade(release, values: model.detail?.values ?? "") }
+                        Button("Upgrade…") { sheet = .upgrade(release, values: model.currentDetail?.values ?? "") }
+                            .disabled(model.currentDetail == nil)
                         Button("Uninstall…", role: .destructive) { sheet = .uninstall(release) }
                     }
                     .controlSize(.small)
@@ -44,7 +45,7 @@ struct HelmReleaseDetailView: View {
                 }
                 .padding(12)
                 Divider()
-                if let detail = model.detail {
+                if let detail = model.currentDetail {
                     switch tab {
                     case .values: ReadOnlyTextView(text: detail.values)
                     case .manifest: ReadOnlyTextView(text: detail.manifest)

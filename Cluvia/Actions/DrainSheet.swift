@@ -40,6 +40,7 @@ struct DrainSheet: View {
         }
         .padding(20)
         .frame(width: 560)
+        .onDisappear { task?.cancel() }
     }
 
     private var isFinished: Bool { if case .finished = events.last { true } else { false } }
@@ -55,7 +56,8 @@ struct DrainSheet: View {
                 for try await event in stream { events.append(event) }
             } catch is CancellationError {
             } catch {
-                self.error = error.localizedDescription
+                let cordoned = events.contains(.cordoned)
+                self.error = error.localizedDescription + (cordoned ? " The node remains cordoned; uncordon it to undo." : "")
             }
             running = false
         }
@@ -65,6 +67,13 @@ struct DrainSheet: View {
 private struct DrainEventRow: View {
     let event: DrainEvent
 
+    static func summary(remaining: Int, refused: Int) -> String {
+        var parts: [String] = []
+        if remaining > 0 { parts.append("\(remaining) pod(s) still running after the timeout") }
+        if refused > 0 { parts.append("\(refused) pod(s) not evicted") }
+        return "Node cordoned; " + parts.joined(separator: ", ")
+    }
+
     var body: some View {
         switch event {
         case .cordoned: Label("Node cordoned", systemImage: "nosign")
@@ -72,9 +81,10 @@ private struct DrainEventRow: View {
         case let .refused(key, reason): Label("\(key.description) not evicted — \(reason)", systemImage: "hand.raised").foregroundStyle(.orange)
         case let .blocked(key, reason): Label("\(key.description) blocked — \(reason)", systemImage: "pause.circle").foregroundStyle(.orange)
         case let .evicted(key): Label("\(key.description) evicted", systemImage: "checkmark.circle").foregroundStyle(.green)
-        case let .finished(remaining):
-            Label(remaining.isEmpty ? "Drain complete" : "Timed out with \(remaining.count) pod(s) remaining",
-                  systemImage: remaining.isEmpty ? "checkmark.seal" : "exclamationmark.triangle")
+        case let .finished(remaining, refused):
+            let clean = remaining.isEmpty && refused.isEmpty
+            Label(clean ? "Drain complete" : Self.summary(remaining: remaining.count, refused: refused.count),
+                  systemImage: clean ? "checkmark.seal" : "exclamationmark.triangle")
                 .fontWeight(.semibold)
         }
     }

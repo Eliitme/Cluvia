@@ -90,6 +90,8 @@ struct HelmSheetView: View {
             namespace = release.namespace
             // Helm does not record where a chart came from; the user may need to qualify it (repo/chart).
             chart = release.chartName
+            // Keep the installed chart version: editing values must not silently upgrade the chart.
+            version = release.chartVersion ?? ""
             values = current
         }
     }

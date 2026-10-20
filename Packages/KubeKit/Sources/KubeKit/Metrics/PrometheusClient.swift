@@ -106,14 +106,15 @@ public struct PrometheusClient: Sendable {
     }
 }
 
-/// PromQL for cAdvisor metrics, which every Prometheus setup scraping kubelets has.
+/// PromQL for cAdvisor metrics, which every Prometheus setup scraping kubelets has. Regexes go in backtick
+/// (raw) strings: a double-quoted PromQL string rejects escapes like `\.` that dotted names need.
 public enum MetricQueries {
     public static func podCPU(namespace: String, podRegex: String) -> String {
-        #"sum(rate(container_cpu_usage_seconds_total{namespace="\#(namespace)",pod=~"\#(podRegex)",container!=""}[2m]))"#
+        #"sum(rate(container_cpu_usage_seconds_total{namespace="\#(namespace)",pod=~`\#(podRegex)`,container!=""}[2m]))"#
     }
 
     public static func podMemory(namespace: String, podRegex: String) -> String {
-        #"sum(container_memory_working_set_bytes{namespace="\#(namespace)",pod=~"\#(podRegex)",container!=""})"#
+        #"sum(container_memory_working_set_bytes{namespace="\#(namespace)",pod=~`\#(podRegex)`,container!=""})"#
     }
 
     /// Node label names differ between distributions (`node`, `kubernetes_io_hostname`, `instance`); try each.
@@ -126,7 +127,7 @@ public enum MetricQueries {
     }
 
     static func nodeSelectors(_ node: String) -> [String] {
-        [#"node="\#(node)""#, #"kubernetes_io_hostname="\#(node)""#, #"instance=~"\#(node)(:[0-9]+)?""#]
+        [#"node="\#(node)""#, #"kubernetes_io_hostname="\#(node)""#, #"instance=~`\#(NSRegularExpression.escapedPattern(for: node))(:[0-9]+)?`"#]
     }
 
     /// Pods belonging to a workload, from the names its controllers generate.

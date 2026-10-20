@@ -14,8 +14,18 @@ public struct HelmRelease: Sendable, Hashable, Identifiable {
 
     /// Chart name without the version suffix (`demo-0.1.0` -> `demo`).
     public var chartName: String {
-        guard let dash = chart.lastIndex(of: "-"), chart[chart.index(after: dash)...].first?.isNumber == true else { return chart }
+        guard let dash = versionDash else { return chart }
         return String(chart[..<dash])
+    }
+
+    /// Installed chart version (`demo-0.1.0` -> `0.1.0`).
+    public var chartVersion: String? {
+        versionDash.map { String(chart[chart.index(after: $0)...]) }
+    }
+
+    private var versionDash: String.Index? {
+        guard let dash = chart.lastIndex(of: "-"), chart[chart.index(after: dash)...].first?.isNumber == true else { return nil }
+        return dash
     }
 }
 

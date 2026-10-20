@@ -21,6 +21,8 @@ final class LogViewModel: Identifiable {
     struct Source: Hashable {
         let pod: String
         let namespace: String
+        /// Pods with sidecars need an explicit container; multi-pod views use each pod's default.
+        var container: String?
     }
 
     let id = UUID()
@@ -83,7 +85,7 @@ final class LogViewModel: Identifiable {
         self.client = client
         pod = title
         namespace = pods.first?.namespace ?? "default"
-        sources = pods.map { Source(pod: $0.name, namespace: $0.namespace ?? "default") }
+        sources = pods.map { Source(pod: $0.name, namespace: $0.namespace ?? "default", container: $0.defaultContainerName) }
         groupTitle = title
         containers = []
         container = ""
@@ -113,7 +115,7 @@ final class LogViewModel: Identifiable {
         status = .streaming
         let remaining = OSAllocatedUnfairLock(initialState: sources.count)
         streamTasks = sources.map { source in
-            let options = LogOptions(container: isMultiPod ? nil : container, previous: previous, tailLines: tailLines, follow: follow)
+            let options = LogOptions(container: isMultiPod ? source.container : container, previous: previous, tailLines: tailLines, follow: follow)
             let stream = LogStreamer(client: client).stream(pod: source.pod, namespace: source.namespace, options: options)
             let prefix = isMultiPod ? "\(source.pod) │ " : nil
             let inbox = inbox
@@ -125,8 +127,13 @@ final class LogViewModel: Identifiable {
                         case let .line(line):
                             let tagged = prefix.map { LogLine(timestamp: line.timestamp, text: $0 + line.text) } ?? line
                             inbox.withLock { $0.append(tagged) }
-                        case let .reconnecting(reason): await self?.update(.reconnecting(reason), generation: current)
-                        case let .ended(reason): await self?.update(.ended(reason), generation: current)
+                        // With several pods, one pod restarting or going away is reported inline, not as the view's state.
+                        case let .reconnecting(reason):
+                            if let prefix { inbox.withLock { $0.append(LogLine(timestamp: nil, text: prefix + "[\(reason)]")) } }
+                            else { await self?.update(.reconnecting(reason), generation: current) }
+                        case let .ended(reason):
+                            if let prefix { inbox.withLock { $0.append(LogLine(timestamp: nil, text: prefix + "[\(reason)]")) } }
+                            else { await self?.update(.ended(reason), generation: current) }
                         }
                     }
                 } catch {

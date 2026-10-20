@@ -22,7 +22,8 @@ public enum DrainEvent: Sendable, Equatable {
     /// Eviction rejected for now, typically by a PodDisruptionBudget; retried until the timeout.
     case blocked(ObjectKey, reason: String)
     case evicted(ObjectKey)
-    case finished(remaining: [ObjectKey])
+    /// `remaining`: evicted pods still running when the timeout passed. `refused`: pods not evicted at all.
+    case finished(remaining: [ObjectKey], refused: [ObjectKey])
 }
 
 /// `kubectl drain` semantics over the Eviction API: cordon, then evict pods, respecting PodDisruptionBudgets.
@@ -45,15 +46,18 @@ public struct NodeDrainer: Sendable {
                         labelSelector: options.podSelector, fieldSelector: "spec.nodeName=\(node)"
                     )).items
                     var pending: [Unstructured] = []
+                    var refused: [ObjectKey] = []
                     for pod in pods {
                         switch Self.classify(pod, options: options) {
                         case let .skip(reason): continuation.yield(.skipped(pod.key, reason: reason))
-                        case let .refuse(reason): continuation.yield(.refused(pod.key, reason: reason))
+                        case let .refuse(reason):
+                            refused.append(pod.key)
+                            continuation.yield(.refused(pod.key, reason: reason))
                         case .evict: pending.append(pod)
                         }
                     }
-                    let remaining = try await evict(pending, options: options) { continuation.yield($0) }
-                    continuation.yield(.finished(remaining: remaining))
+                    let remaining = try await evict(pending, node: node, options: options) { continuation.yield($0) }
+                    continuation.yield(.finished(remaining: remaining, refused: refused))
                     continuation.finish()
                 } catch {
                     continuation.finish(throwing: error)
@@ -84,7 +88,8 @@ public struct NodeDrainer: Sendable {
     }
 
     /// Evicts until every pod is gone or the timeout passes; returns pods still present.
-    private func evict(_ pods: [Unstructured], options: DrainOptions, report: (DrainEvent) -> Void) async throws -> [ObjectKey] {
+    private func evict(_ pods: [Unstructured], node: String, options: DrainOptions, report: (DrainEvent) -> Void) async throws -> [ObjectKey] {
+        let uids = Dictionary(pods.map { ($0.key, $0.uid) }, uniquingKeysWith: { first, _ in first })
         let clock = ContinuousClock()
         let deadline = clock.now + options.timeout
         var waiting = pods.map(\.key)
@@ -102,10 +107,21 @@ public struct NodeDrainer: Sendable {
                     evicted.insert(key)
                 }
             }
-            // An evicted pod counts as drained once it is actually gone.
+            // An evicted pod counts as drained once it is actually gone. StatefulSets recreate pods under the
+            // same name, so a pod with another UID or on another node is a replacement, not the evicted pod.
             var stillPresent: [ObjectKey] = []
             for key in waiting {
-                if (try? await client.get(.pods, name: key.name, namespace: key.namespace)) != nil { stillPresent.append(key) }
+                do {
+                    let current = try await client.get(.pods, name: key.name, namespace: key.namespace)
+                    let replaced = current.uid != uids[key] ?? nil || current.json[path: "spec", "nodeName"]?.stringValue != node
+                    if !replaced { stillPresent.append(key) }
+                } catch let error as KubeAPIError where error.statusCode == 404 {
+                    continue
+                } catch is CancellationError {
+                    throw CancellationError()
+                } catch {
+                    stillPresent.append(key) // transient error: not proven gone
+                }
             }
             waiting = stillPresent
             if !waiting.isEmpty { try await Task.sleep(for: Self.retryInterval) }

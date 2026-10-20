@@ -54,6 +54,7 @@ struct CommandPaletteView: View {
         }
         .onChange(of: query) { selection = results.first?.id }
         .task(id: query) {
+            remoteItems = []
             try? await Task.sleep(for: .milliseconds(250))
             guard !Task.isCancelled else { return }
             let found = await session.searchIndex.search(query, session: session)

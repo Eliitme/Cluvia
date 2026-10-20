@@ -8,6 +8,7 @@ struct HelmDecodingTests {
         let list = #"[{"name":"demo","namespace":"apps","revision":"3","updated":"2026-10-20 15:22:34 +0700","status":"deployed","chart":"demo-0.1.0","app_version":"1.16.0"}]"#
         let release = try #require(try HelmDecoding.releases(Data(list.utf8)).first)
         #expect(release.revision == 3 && release.chartName == "demo" && release.id == "apps/demo")
+        #expect(release.chartVersion == "0.1.0")
         let history = #"[{"revision":1,"status":"superseded","chart":"demo-0.1.0"},{"revision":2,"status":"deployed","chart":"demo-0.1.0","description":"Upgrade complete"}]"#
         #expect(try HelmDecoding.history(Data(history.utf8)).map(\.revision) == [2, 1])
         #expect(HelmRelease(name: "x", namespace: "n", revision: 1, updated: "", status: "", chart: "my-chart-v2", appVersion: "").chartName == "my-chart-v2")

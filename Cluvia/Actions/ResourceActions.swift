@@ -48,7 +48,7 @@ enum ResourceAction: String, CaseIterable, Identifiable {
     }
 
     /// Actions that disrupt workloads go through a confirmation that names the cluster context.
-    var needsConfirmation: Bool { [.restart, .cordon, .uncordon, .delete].contains(self) }
+    var needsConfirmation: Bool { [.restart, .cordon, .uncordon, .nodeShell, .delete].contains(self) }
 
     static func available(for kind: ResourceKind) -> [ResourceAction] {
         // Group checks keep a CRD that happens to be called "Deployment" from getting built-in actions.
@@ -105,5 +105,12 @@ enum ResourceActions {
     /// YAML for editing: the live object without status and server bookkeeping.
     static func editableYAML(_ object: Unstructured) throws -> String {
         try YAMLRenderer.yaml(ResourceApplier.prepared(object.json))
+    }
+}
+
+extension Unstructured {
+    /// The container `kubectl` picks for a pod: the default-container annotation, else the first container.
+    var defaultContainerName: String? {
+        annotations["kubectl.kubernetes.io/default-container"] ?? json[path: "spec", "containers"]?.arrayValue?.first?["name"]?.stringValue
     }
 }

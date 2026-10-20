@@ -35,4 +35,10 @@ struct NodeDrainerTests {
             Issue.record("DaemonSet pods are refused when not ignored")
         }
     }
+
+    @Test func nodeShellPodNamesAreValidLabels() {
+        let name = NodeShellPod.podName(node: "ip-10-0-1-23.eu-west-1.compute.internal")
+        #expect(name.hasPrefix("node-shell-ip-10-0-1-23-eu-west-1-compu"))
+        #expect(name.allSatisfy { $0.isLowercase || $0.isNumber || $0 == "-" } && !name.contains("--"))
+    }
 }

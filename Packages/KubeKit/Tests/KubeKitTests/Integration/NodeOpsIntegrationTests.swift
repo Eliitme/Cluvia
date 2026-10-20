@@ -74,10 +74,11 @@ struct NodeOpsIntegrationTests {
         #expect(events.first == .cordoned)
         #expect(events.contains { if case let .refused(key, _) = $0 { key.name == "cluvia-it-drain-loose" } else { false } })
         #expect(events.contains { if case .blocked = $0 { true } else { false } }, "PDB should block eviction: \(events)")
-        guard case let .finished(remaining) = events.last else {
+        guard case let .finished(remaining, refused) = events.last else {
             Issue.record("no finish event")
             return
         }
         #expect(remaining.count == 1 && remaining.first?.name.hasPrefix("cluvia-it-drain-") == true)
+        #expect(refused.map(\.name) == ["cluvia-it-drain-loose"])
     }
 }

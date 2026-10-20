@@ -32,5 +32,7 @@ struct PrometheusTests {
         let statefulSet = try Regex("^" + MetricQueries.podRegex(kind: "StatefulSet", name: "db") + "$")
         #expect("db-0".wholeMatch(of: statefulSet) != nil && "db-x".wholeMatch(of: statefulSet) == nil)
         #expect(MetricQueries.nodeCPU("n1").components(separatedBy: " or ").count == 3)
+        #expect(MetricQueries.podCPU(namespace: "ns", podRegex: MetricQueries.podRegex(kind: "Deployment", name: "api.v2"))
+            .contains(#"pod=~`api\.v2-[a-z0-9]+-[a-z0-9]+`"#))
     }
 }

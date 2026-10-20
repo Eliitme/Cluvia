@@ -103,6 +103,8 @@ struct LogTextView: NSViewRepresentable {
         let atBottom = scroll.contentView.bounds.maxY >= textView.bounds.maxY - 40
         let attributes: [NSAttributedString.Key: Any] = [.font: textView.font as Any, .foregroundColor: NSColor.textColor]
         var rescanFrom: Int?
+        /// Where pod-name coloring must run: rebuilt or appended text only (colors survive search changes).
+        var recolorFrom: Int?
         /// Matches ending at or before this offset were already counted.
         var countedUpTo = 0
 
@@ -112,12 +114,14 @@ struct LogTextView: NSViewRepresentable {
             state.showTimestamps = model.showTimestamps
             state.matches = 0
             rescanFrom = 0
+            recolorFrom = 0
         } else if model.buffer.endIndex > state.renderedEnd, let text = model.text(from: state.renderedEnd) {
             let seam = storage.length
             storage.append(NSAttributedString(string: (seam > 0 ? "\n" : "") + text, attributes: attributes))
             // Back up by the query length so a match spanning the seam is found.
             rescanFrom = max(0, seam - model.search.utf16.count)
             countedUpTo = seam
+            recolorFrom = seam
         }
         state.renderedEnd = model.buffer.endIndex
         if state.search != model.search {
@@ -127,9 +131,9 @@ struct LogTextView: NSViewRepresentable {
             rescanFrom = 0
             countedUpTo = 0
         }
-        if model.isMultiPod, let colorFrom = rescanFrom.map({ max(0, $0) }) {
+        if model.isMultiPod, let recolorFrom {
             let order = Dictionary(model.sources.enumerated().map { ($1.pod, $0) }, uniquingKeysWith: { first, _ in first })
-            Self.colorPodPrefixes(in: storage, from: colorFrom == 0 ? 0 : countedUpTo, order: order)
+            Self.colorPodPrefixes(in: storage, from: recolorFrom, order: order)
         }
         if let rescanFrom, !model.search.isEmpty {
             state.matches += highlight(model.search, in: textView, from: rescanFrom, countingAfter: countedUpTo)
@@ -138,7 +142,8 @@ struct LogTextView: NSViewRepresentable {
         if atBottom { textView.scrollToEndOfDocument(nil) }
     }
 
-    static let prefixPattern = try! NSRegularExpression(pattern: #"([A-Za-z0-9.\-]+) │ "#)
+    /// Pod name at the start of a line, optionally after a timestamp.
+    static let prefixPattern = try! NSRegularExpression(pattern: #"^(?:\S+ )?([A-Za-z0-9.\-]+) │ "#, options: .anchorsMatchLines)
     static let prefixColors: [NSColor] = [.systemBlue, .systemGreen, .systemOrange, .systemPurple, .systemPink, .systemTeal, .systemYellow, .systemIndigo]
 
     /// Colors each line's pod-name prefix; pods get distinct colors in the order they were opened.

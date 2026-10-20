@@ -20,14 +20,24 @@ final class ShutdownCleanup {
     func runAll() async {
         let pending = Array(tasks.values)
         tasks.removeAll()
-        await withTaskGroup(of: Void.self) { group in
-            for cleanup in pending { group.addTask { await cleanup() } }
-            group.addTask { try? await Task.sleep(for: Self.timeout) }
-            // Whichever finishes first: all cleanups, or the timeout.
+        guard !pending.isEmpty else { return }
+        await withTaskGroup(of: Bool.self) { group in
+            for cleanup in pending {
+                group.addTask {
+                    await cleanup()
+                    return false
+                }
+            }
+            group.addTask {
+                try? await Task.sleep(for: Self.timeout)
+                return true
+            }
+            // Whichever comes first: every cleanup finished, or the timeout.
             var finished = 0
-            for await _ in group {
+            for await timedOut in group {
+                if timedOut { break }
                 finished += 1
-                if finished == pending.count || pending.isEmpty { break }
+                if finished == pending.count { break }
             }
             group.cancelAll()
         }
