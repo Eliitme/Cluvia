@@ -43,8 +43,10 @@ struct ResourceDetailView: View {
             }
             .padding(12)
             Divider()
-            content
+            content.frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+        // Pin the header to the top; short content such as an empty state would otherwise center the whole stack.
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .task(id: LoadID(key: row.id, resourceVersion: row.object.resourceVersion)) {
             guard let client = session.client else { return }
             await model.load(client: client, kind: kind, key: row.id)
