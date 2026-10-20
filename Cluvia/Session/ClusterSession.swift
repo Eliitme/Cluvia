@@ -20,8 +20,14 @@ final class ClusterSession {
     /// metrics.k8s.io is served (metrics-server installed); CPU/memory columns are hidden otherwise.
     private(set) var metricsAvailable = false
     var selectedKind: ResourceKind? {
-        didSet { if selectedKind != oldValue { selectedObject = nil } }
+        didSet {
+            showingHelm = false
+            if selectedKind != oldValue { selectedObject = nil }
+        }
     }
+    /// The Helm releases page is shown instead of a resource table.
+    var showingHelm = false
+    let helm: HelmReleasesModel
     var selectedObject: ObjectKey?
     let dock = DockModel()
     let portForwards = PortForwardManager()
@@ -45,6 +51,7 @@ final class ClusterSession {
     init(contextName: String, settings: AppSettingsStore) {
         self.contextName = contextName
         self.settings = settings
+        helm = HelmReleasesModel(contextName: contextName)
         selectedNamespaces = settings.namespaces(for: contextName)
     }
 

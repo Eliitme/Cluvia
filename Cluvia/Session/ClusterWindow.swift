@@ -67,6 +67,11 @@ struct ClusterWindow: View {
         if let namespaces = defaults.string(forKey: "CluviaNamespace") {
             session.selectedNamespaces = Set(namespaces.split(separator: ",").map(String.init))
         }
+        if defaults.string(forKey: "CluviaKind") == "helm" {
+            session.showingHelm = true
+            session.helm.selection = defaults.string(forKey: "CluviaObject")
+            return
+        }
         if let resource = defaults.string(forKey: "CluviaKind"), let kind = session.kinds.first(where: { $0.gvr.resource == resource }) {
             session.selectedKind = kind
         }
