@@ -8,6 +8,8 @@ struct AppSettings: Codable, Equatable {
     var namespacesByContext: [String: [String]] = [:]
     /// Manually chosen Prometheus (`namespace/service:port`) per context, overriding auto-detection.
     var prometheusByContext: [String: String] = [:]
+    /// Contexts connected as soon as the app opens.
+    var autoConnectContexts: Set<String> = []
 
     init() {}
 
@@ -17,6 +19,7 @@ struct AppSettings: Codable, Equatable {
         favoriteContexts = try c.decodeIfPresent(Set<String>.self, forKey: .favoriteContexts) ?? []
         namespacesByContext = try c.decodeIfPresent([String: [String]].self, forKey: .namespacesByContext) ?? [:]
         prometheusByContext = try c.decodeIfPresent([String: String].self, forKey: .prometheusByContext) ?? [:]
+        autoConnectContexts = try c.decodeIfPresent(Set<String>.self, forKey: .autoConnectContexts) ?? []
     }
 }
 
@@ -62,13 +65,23 @@ final class AppSettingsStore {
         update { $0.prometheusByContext[context] = endpoint.flatMap { $0.isEmpty ? nil : $0 } }
     }
 
+    func connectsAutomatically(_ context: String) -> Bool {
+        settings.autoConnectContexts.contains(context)
+    }
+
+    func setConnectsAutomatically(_ enabled: Bool, for context: String) {
+        update { if enabled { $0.autoConnectContexts.insert(context) } else { $0.autoConnectContexts.remove(context) } }
+    }
+
     /// Carries a context's preferences over when it is renamed in the kubeconfig; nil `new` forgets them (deleted).
     func moveContext(_ old: String, to new: String?) {
         update { settings in
             let favorite = settings.favoriteContexts.remove(old) != nil
             let namespaces = settings.namespacesByContext.removeValue(forKey: old)
             let prometheus = settings.prometheusByContext.removeValue(forKey: old)
+            let autoConnect = settings.autoConnectContexts.remove(old) != nil
             guard let new else { return }
+            if autoConnect { settings.autoConnectContexts.insert(new) }
             if favorite { settings.favoriteContexts.insert(new) }
             settings.namespacesByContext[new] = namespaces
             settings.prometheusByContext[new] = prometheus

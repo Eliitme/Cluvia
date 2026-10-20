@@ -3,6 +3,7 @@ import SwiftUI
 /// Root of the single main window: clusters and their resource kinds in the sidebar, the selected cluster on the right.
 struct MainWindowView: View {
     @Environment(ClusterCatalogModel.self) private var catalog
+    @Environment(AppSettingsStore.self) private var settings
 
     var body: some View {
         NavigationSplitView {
@@ -20,6 +21,10 @@ struct MainWindowView: View {
         .frame(minWidth: 960, minHeight: 540)
         .task {
             await catalog.reload()
+            // Clusters the user asked to open on launch; the first one is shown.
+            for context in catalog.contexts.map(\.name).reversed() where settings.connectsAutomatically(context) {
+                catalog.open(context, settings: settings)
+            }
             await catalog.checkAutomatically()
         }
     }
