@@ -21,10 +21,7 @@ struct MainWindowView: View {
         .frame(minWidth: 960, minHeight: 540)
         .task {
             await catalog.reload()
-            // Clusters the user asked to open on launch; the first one is shown.
-            for context in catalog.contexts.map(\.name).reversed() where settings.connectsAutomatically(context) {
-                catalog.open(context, settings: settings)
-            }
+            catalog.connectAutomatically(settings: settings)
             await catalog.checkAutomatically()
         }
     }

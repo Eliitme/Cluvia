@@ -30,6 +30,19 @@ extension ClusterCatalogModel {
         #endif
     }
 
+    /// Opens the clusters marked "connect automatically", once per launch: reopening the window must not reconnect
+    /// clusters the user has since disconnected. The first in sidebar order (favorites first) is shown unless
+    /// something is already selected.
+    func connectAutomatically(settings: AppSettingsStore) {
+        guard !didAutoConnect else { return }
+        didAutoConnect = true
+        let names = contexts.map(\.name).filter(settings.connectsAutomatically)
+        let ordered = names.filter(settings.isFavorite) + names.filter { !settings.isFavorite($0) }
+        let selected = selectedContext
+        for name in ordered.reversed() { open(name, settings: settings) }
+        if let selected { selectedContext = selected }
+    }
+
     /// Stops a cluster's watches, shells and port forwards and forgets its session.
     func disconnect(_ name: String) {
         sessions.removeValue(forKey: name)?.disconnect()

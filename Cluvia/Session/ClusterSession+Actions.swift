@@ -4,6 +4,8 @@ import KubeKit
 /// Entry points for resource actions; menus, the inspector and the command palette all route through here.
 extension ClusterSession {
     func request(_ action: ResourceAction, kind: ResourceKind, key: ObjectKey) {
+        // A sheet is already open for another action; starting one now would replace it and lose its state.
+        guard pendingAction == nil, editModel == nil else { return }
         switch action {
         case .logs where kind.kind != "Pod":
             run { client in

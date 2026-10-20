@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// Bottom bar: which cluster this is (its badge color matches the sidebar), whether it is live, and background
-/// work that keeps running: port forwards and usage metrics.
+/// Bottom bar: which cluster this is (its badge color matches the sidebar) and background work that keeps running:
+/// port forwards and usage metrics. Watch trouble shows in the table's own banner.
 struct StatusBarView: View {
     let session: ClusterSession
 
@@ -11,9 +11,6 @@ struct StatusBarView: View {
                 ClusterBadge(name: session.contextName, size: 14)
                 Text(session.contextName)
             }
-            Label("Live", systemImage: "circle.fill")
-                .foregroundStyle(Color.brandTeal)
-                .help("Watching the cluster for changes")
             if let version = session.serverVersion { Text(version).foregroundStyle(.secondary) }
             Spacer()
             if !session.portForwards.entries.isEmpty {

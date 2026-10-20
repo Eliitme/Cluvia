@@ -13,8 +13,12 @@ struct StatusSummary: Equatable {
         switch object.kind {
         case "Pod":
             let statuses = json[path: "status", "containerStatuses"]?.arrayValue ?? []
-            // A waiting/terminated reason (CrashLoopBackOff, ImagePullBackOff, OOMKilled) says more than the phase.
-            let reason = statuses.lazy.compactMap { $0["state"]?.objectValue?.values.first?["reason"]?.stringValue }.first
+            let initStatuses = json[path: "status", "initContainerStatuses"]?.arrayValue ?? []
+            let reasonOf = { (status: JSONValue) in status["state"]?.objectValue?.values.first?["reason"]?.stringValue }
+            // A waiting/terminated reason (CrashLoopBackOff, ImagePullBackOff, OOMKilled) says more than the phase;
+            // a stuck init container reads like kubectl's "Init:CrashLoopBackOff". A completed init container is fine.
+            let initReason = initStatuses.lazy.compactMap(reasonOf).first { $0 != "Completed" }.map { "Init:\($0)" }
+            let reason = initReason ?? statuses.lazy.compactMap(reasonOf).first
             let phase = json[path: "status", "phase"]?.stringValue
             let ready = statuses.filter { $0["ready"] == .bool(true) }.count
             text = [reason ?? phase, statuses.isEmpty ? nil : "\(ready)/\(statuses.count) ready"].compactMap { $0 }.joined(separator: " · ")
@@ -34,14 +38,18 @@ struct StatusSummary: Equatable {
         }
         guard let text, !text.isEmpty else { return nil }
         self.text = text
-        let lead = text.components(separatedBy: " · ").first ?? text
+        let segments = text.components(separatedBy: " · ")
         // Counts like "0/2 ready" are healthy only when complete.
-        if let slash = lead.split(separator: " ").first, slash.contains("/") {
-            let parts = slash.split(separator: "/")
-            tone = parts.count == 2 && parts[0] == parts[1] ? .good : .pending
-        } else {
-            tone = StatusTone.of(lead, column: "status")
+        let countsComplete = segments.allSatisfy { segment in
+            guard let count = segment.split(separator: " ").first, count.contains("/") else { return true }
+            let parts = count.split(separator: "/")
+            return parts.count == 2 && parts[0] == parts[1]
         }
+        let leadTone = segments[0].first?.isNumber == true ? StatusTone.good : StatusTone.of(segments[0], column: "status")
+        let jobFailed = object.kind == "Job" && (json[path: "status", "conditions"]?.arrayValue ?? [])
+            .contains { $0["type"]?.stringValue == "Failed" && $0["status"]?.stringValue == "True" }
+        // "Running · 0/1 ready" is not healthy: a good lead with incomplete counts reads as pending.
+        tone = jobFailed ? .bad : (leadTone == .good && !countsComplete ? .pending : leadTone)
     }
 }
 

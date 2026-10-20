@@ -131,10 +131,16 @@ struct LogTextView: NSViewRepresentable {
             rescanFrom = 0
             countedUpTo = 0
         }
-        if let recolorFrom { LogLevelColoring.apply(to: storage, from: recolorFrom) }
-        if model.isMultiPod, let recolorFrom {
-            let order = Dictionary(model.sources.enumerated().map { ($1.pod, $0) }, uniquingKeysWith: { first, _ in first })
-            Self.colorPodPrefixes(in: storage, from: recolorFrom, order: order)
+        if let recolorFrom {
+            // One editing pass and one copy of the text for all coloring, instead of a layout pass per attribute.
+            let text = storage.string
+            storage.beginEditing()
+            LogLevelColoring.apply(to: storage, text: text, from: recolorFrom)
+            if model.isMultiPod {
+                let order = Dictionary(model.sources.enumerated().map { ($1.pod, $0) }, uniquingKeysWith: { first, _ in first })
+                Self.colorPodPrefixes(in: storage, text: text, from: recolorFrom, order: order)
+            }
+            storage.endEditing()
         }
         if let rescanFrom, !model.search.isEmpty {
             state.matches += highlight(model.search, in: textView, from: rescanFrom, countingAfter: countedUpTo)
@@ -148,10 +154,10 @@ struct LogTextView: NSViewRepresentable {
     static let prefixColors: [NSColor] = [.systemBlue, .systemGreen, .systemOrange, .systemPurple, .systemPink, .systemTeal, .systemYellow, .systemIndigo]
 
     /// Colors each line's pod-name prefix; pods get distinct colors in the order they were opened.
-    static func colorPodPrefixes(in storage: NSTextStorage, from start: Int, order: [String: Int]) {
-        let range = NSRange(location: start, length: storage.length - start)
-        for match in prefixPattern.matches(in: storage.string, range: range) {
-            let name = (storage.string as NSString).substring(with: match.range(at: 1))
+    static func colorPodPrefixes(in storage: NSTextStorage, text: String, from start: Int, order: [String: Int]) {
+        let range = NSRange(location: start, length: (text as NSString).length - start)
+        for match in prefixPattern.matches(in: text, range: range) {
+            let name = (text as NSString).substring(with: match.range(at: 1))
             let color = prefixColors[(order[name] ?? 0) % prefixColors.count]
             storage.addAttribute(.foregroundColor, value: color, range: match.range(at: 1))
         }

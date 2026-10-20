@@ -59,6 +59,10 @@ struct ResourceBrowserView: View {
                 }
             }
             .navigationSubtitle("\(kind.title) · \(rows.count)")
+            .onChange(of: session.selectedObject.map { key in rows.contains { $0.id == key } } ?? false, initial: true) {
+                session.selectionVisible = $1
+            }
+            .onDisappear { session.selectionVisible = false }
             .onChange(of: stores.reduce(0) { $0 + $1.items.count }) { _, total in
                 guard stores.allSatisfy({ $0.phase == .live }) else { return }
                 session.updateCount(kind.gvr, total)

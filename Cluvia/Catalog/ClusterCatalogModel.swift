@@ -20,6 +20,7 @@ final class ClusterCatalogModel {
     var selectedContext: String?
     /// Clusters opened this run. They stay connected (watches, shells, port forwards) until disconnected.
     var sessions: [String: ClusterSession] = [:]
+    @ObservationIgnored var didAutoConnect = false
     /// Kubeconfig files in precedence order (the first is where new contexts go), and the file defining each context.
     private(set) var files: [URL] = []
     private(set) var contextSources: [String: URL] = [:]

@@ -18,13 +18,13 @@ struct WorkspaceSidebarView: View {
 
     /// Favorites, then one group per kubeconfig file (titled by file name, path in the tooltip); each context
     /// appears once.
-    private var groups: [(title: String, help: String?, contexts: [ContextSummary])] {
+    private var groups: [(id: String, title: String, help: String?, contexts: [ContextSummary])] {
         let favorites = visible.filter { settings.isFavorite($0.name) }
-        var result = favorites.isEmpty ? [] : [(title: "Favorites", help: String?.none, contexts: favorites)]
+        var result = favorites.isEmpty ? [] : [(id: "\u{0}favorites", title: "Favorites", help: String?.none, contexts: favorites)]
         let others = visible.filter { !settings.isFavorite($0.name) }
         for file in catalog.files {
             let contexts = others.filter { catalog.contextSources[$0.name] == file }
-            if !contexts.isEmpty { result.append((title: file.lastPathComponent, help: Self.displayPath(file), contexts: contexts)) }
+            if !contexts.isEmpty { result.append((id: file.path, title: file.lastPathComponent, help: Self.displayPath(file), contexts: contexts)) }
         }
         return result
     }
@@ -36,7 +36,8 @@ struct WorkspaceSidebarView: View {
             if groups.count == 1, let only = groups.first, only.help != nil {
                 rows(only.contexts)
             } else {
-                ForEach(groups, id: \.title) { group in
+                // Keyed by full path: two files may share a name (e.g. two "config"s).
+                ForEach(groups, id: \.id) { group in
                     Section {
                         rows(group.contexts)
                     } header: {

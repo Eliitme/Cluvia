@@ -70,7 +70,7 @@ struct ForwardPortSheet: View {
                     }
                 }
                 .keyboardShortcut(.defaultAction)
-                .disabled(busy || remotePort <= 0 || (!localPort.isEmpty && UInt16(localPort) == nil))
+                .disabled(busy || !(1...65535).contains(remotePort) || (!localPort.isEmpty && UInt16(localPort) == nil))
             }
         }
         .padding(20)

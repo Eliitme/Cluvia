@@ -98,6 +98,10 @@ struct ContextRowMenu: View {
         Button(settings.isFavorite(context.name) ? "Remove from Favorites" : "Add to Favorites") {
             settings.toggleFavorite(context.name)
         }
+        Toggle("Connect Automatically", isOn: Binding(
+            get: { settings.connectsAutomatically(context.name) },
+            set: { settings.setConnectsAutomatically($0, for: context.name) }
+        ))
         Divider()
         Button("Edit…") { editing = .edit(context.name) }
         Button("Set as Current Context") {

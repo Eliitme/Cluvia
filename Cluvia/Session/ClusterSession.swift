@@ -38,6 +38,8 @@ final class ClusterSession {
     var selectedObject: ObjectKey?
     /// The detail panel next to the resource table.
     var showInspector = false
+    /// The selected object is on screen (in the current table, not filtered out); object commands act only then.
+    var selectionVisible = false
     let dock = DockModel()
     let portForwards = PortForwardManager()
     /// Sheets driven from menus, the inspector and the command palette.
