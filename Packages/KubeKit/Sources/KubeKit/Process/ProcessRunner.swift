@@ -150,10 +150,12 @@ private final class ProcessExecution: @unchecked Sendable {
     }
 
     private func complete() {
-        let result = lock.withLock {
-            ProcessResult(status: process.terminationStatus, stdout: stdoutData, stderr: stderrData)
+        let (result, cancelled) = lock.withLock {
+            (ProcessResult(status: process.terminationStatus, stdout: stdoutData, stderr: stderrData), self.cancelled)
         }
-        finish(.success(result))
+        // A process ended by a timeout or cancellation reports that, not its SIGTERM exit: the termination handler
+        // can run before `abort` gets to finish.
+        finish(cancelled.map { .failure($0) } ?? .success(result))
     }
 
     private func finish(_ result: Result<ProcessResult, Error>) {
