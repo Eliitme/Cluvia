@@ -4,7 +4,13 @@
 </p>
 
 <p align="center"><strong>A clear view of your Kubernetes world.</strong><br>
-A fast, native macOS app to explore, understand and manage your clusters.</p>
+A fast, native <strong>Kubernetes GUI for macOS</strong> to explore, understand and manage your clusters:
+browse resources and CRDs, stream pod logs, open shells, port-forward, edit YAML and kubeconfig, and manage Helm
+releases.</p>
+
+<p align="center">
+  <a href="https://github.com/Eliitme/Cluvia/releases/latest"><img src="https://img.shields.io/badge/Download-macOS%20DMG-2563EB?style=for-the-badge&logo=apple&logoColor=white" alt="Download Cluvia for macOS"></a>
+</p>
 
 <p align="center">
   <a href="https://github.com/Eliitme/Cluvia/actions/workflows/ci.yml"><img src="https://github.com/Eliitme/Cluvia/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
@@ -41,6 +47,13 @@ A fast, native macOS app to explore, understand and manage your clusters.</p>
   <img src=".github/assets/screenshot-logs.png" alt="Cluvia streaming pod logs in the bottom panel" width="900">
 </p>
 
+## Works with
+
+Any conformant Kubernetes cluster your kubeconfig can reach: Amazon EKS, Google GKE, Azure AKS, DigitalOcean,
+Rancher and k3s, kind, minikube, Docker Desktop, OpenShift and self-managed clusters. Authentication with client
+certificates, tokens and credential plugins (`aws`, `gke-gcloud-auth-plugin`, `kubelogin`, OIDC helpers) works as in
+`kubectl`.
+
 ## Install
 
 Download the latest DMG from [Releases](https://github.com/Eliitme/Cluvia/releases) and drag Cluvia to
@@ -56,6 +69,27 @@ Applications. Requires macOS 14 or later.
 Cluvia only writes to your kubeconfig when you add, edit, import or delete a context, or set the current context.
 Before each write it takes the same lock as `kubectl`, refuses to overwrite a file that changed on disk, and keeps a
 timestamped backup next to the file (`config.cluvia-backup-…`). Comments in the file are not preserved.
+
+## FAQ
+
+**Does Cluvia need kubectl?**
+No. Cluvia talks to the Kubernetes API directly, including logs, shells (exec) and port-forwarding. Credential
+plugins referenced by your kubeconfig still need to be installed.
+
+**Is Cluvia free?**
+Yes, for noncommercial use under the [PolyForm Noncommercial License](LICENSE). For commercial use, please
+[get in touch](mailto:levanlong220700@gmail.com).
+
+**Does Cluvia send my data anywhere?**
+No. It connects only to your clusters (and Prometheus inside them for usage charts). There is no account, telemetry
+or cloud service.
+
+**Which macOS versions are supported?**
+macOS 14 Sonoma and later, on Apple silicon and Intel.
+
+**macOS says the app cannot be opened.**
+Builds that are not yet notarized need a one-time approval: open **System Settings › Privacy & Security** and click
+**Open Anyway** next to the Cluvia message.
 
 ## Build from source
 
