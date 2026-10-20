@@ -1,0 +1,94 @@
+name: Release
+
+# release-please keeps a "Release vX.Y.Z" pull request up to date from Conventional Commits on main (version in
+# project.yml and CHANGELOG.md). Merging it tags the release and creates the GitHub Release; the build job then
+# attaches the DMG. Run manually with a tag to (re)build the assets of an existing release.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag to build, e.g. v0.1.0
+        required: true
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-please:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+    steps:
+      - uses: googleapis/release-please-action@v4
+        id: release
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+  build:
+    needs: release-please
+    if: always() && (needs.release-please.outputs.release_created == 'true' || github.event_name == 'workflow_dispatch')
+    runs-on: macos-26
+    timeout-minutes: 60
+    env:
+      TAG: ${{ needs.release-please.outputs.tag_name || inputs.tag }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.TAG }}
+      - name: Tools
+        run: |
+          brew install xcodegen
+          xcodebuild -downloadComponent MetalToolchain
+      - name: Signing certificate
+        env:
+          CERTIFICATE_P12: ${{ secrets.DEVELOPER_ID_CERTIFICATE_P12 }}
+          CERTIFICATE_PASSWORD: ${{ secrets.DEVELOPER_ID_CERTIFICATE_PASSWORD }}
+        run: |
+          if [ -z "$CERTIFICATE_P12" ]; then
+            echo "No Developer ID certificate secret: building an ad-hoc signed, unnotarized DMG."
+            echo "UNSIGNED=1" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
+          KEYCHAIN_PASSWORD=$(uuidgen)
+          echo "$CERTIFICATE_P12" | base64 --decode > "$RUNNER_TEMP/certificate.p12"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security import "$RUNNER_TEMP/certificate.p12" -P "$CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN"
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" >/dev/null
+          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
+          rm "$RUNNER_TEMP/certificate.p12"
+      - name: Notary key
+        env:
+          NOTARY_KEY: ${{ secrets.NOTARY_API_KEY_P8 }}
+        run: |
+          if [ "${UNSIGNED:-0}" = "1" ] || [ -z "$NOTARY_KEY" ]; then
+            [ "${UNSIGNED:-0}" = "1" ] || echo "SKIP_NOTARIZE=1" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          echo "$NOTARY_KEY" > "$RUNNER_TEMP/notary.p8"
+          echo "NOTARY_KEY_PATH=$RUNNER_TEMP/notary.p8" >> "$GITHUB_ENV"
+      - name: Build DMG
+        env:
+          DEVELOPMENT_TEAM: ${{ secrets.DEVELOPMENT_TEAM }}
+          NOTARY_KEY_ID: ${{ secrets.NOTARY_API_KEY_ID }}
+          NOTARY_ISSUER: ${{ secrets.NOTARY_API_ISSUER_ID }}
+          BUILD_NUMBER: ${{ github.run_number }}
+        run: scripts/build-release.sh
+      - name: Attach to release
+        run: |
+          gh release upload "$TAG" build/release/Cluvia-*.dmg build/release/Cluvia-*.dmg.sha256 --clobber
+          case "$TAG" in *-*) gh release edit "$TAG" --prerelease ;; esac
+      - name: Clean up signing material
+        if: always()
+        run: |
+          security delete-keychain "$RUNNER_TEMP/signing.keychain-db" 2>/dev/null || true
+          rm -f "$RUNNER_TEMP/notary.p8"

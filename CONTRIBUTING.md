@@ -91,10 +91,53 @@ and never log or display credentials.
 
 ## Releases
 
+Versions follow [Semantic Versioning](https://semver.org/) and are tagged `vMAJOR.MINOR.PATCH`
+(pre-releases: `v0.3.0-beta.1`). They are derived from commit messages, so use Conventional Commits:
+
+| Commit | Bump (before 1.0) | Bump (from 1.0) |
+|---|---|---|
+| `fix: …` | patch | patch |
+| `feat: …` | minor | minor |
+| `feat!: …` or a `BREAKING CHANGE:` footer | minor | major |
+
+Only `feat`, `fix`, `perf` and `revert` appear in the changelog; `docs`, `chore`, `ci`, `test`, `refactor`
+and `build` do not.
+
+How a release happens ([`.github/workflows/release.yml`](.github/workflows/release.yml)):
+
+1. On every push to `main`, [release-please](https://github.com/googleapis/release-please) keeps a
+   "chore(main): release X.Y.Z" pull request up to date. It bumps `MARKETING_VERSION` in `project.yml` and adds the
+   release to `CHANGELOG.md`; edit the notes in that pull request if needed.
+2. Merging it tags `vX.Y.Z` and creates the GitHub Release.
+3. The build job archives the app, signs it with Developer ID, notarizes and staples it, and attaches
+   `Cluvia-X.Y.Z.dmg` and its `.sha256` to the release.
+
+`CHANGELOG.md` is bundled into the app: it shows "What's New" once after an update and lists every release under
+**Help › Release Notes**.
+
+### Signing secrets
+
+Add these under **Settings › Secrets and variables › Actions**. Without the certificate, the workflow still publishes
+an ad-hoc signed DMG that Gatekeeper asks users to approve; without the notary key, the DMG is signed but not
+notarized.
+
+| Secret | Value |
+|---|---|
+| `DEVELOPER_ID_CERTIFICATE_P12` | "Developer ID Application" certificate and key exported from Keychain Access as `.p12`, base64-encoded: `base64 -i cert.p12 \| pbcopy` |
+| `DEVELOPER_ID_CERTIFICATE_PASSWORD` | Password chosen when exporting the `.p12` |
+| `DEVELOPMENT_TEAM` | Apple team ID |
+| `NOTARY_API_KEY_P8` | Contents of an App Store Connect API key (`AuthKey_XXXX.p8`, Developer role) |
+| `NOTARY_API_KEY_ID` | That key's ID |
+| `NOTARY_API_ISSUER_ID` | Issuer ID shown on the App Store Connect API keys page |
+
+To rebuild the assets of an existing release, run the Release workflow manually with its tag.
+
+### Building a release locally
+
 ```sh
 DEVELOPMENT_TEAM=<team id> NOTARY_PROFILE=<notarytool keychain profile> scripts/build-release.sh
 ```
 
-Produces `build/release/Cluvia-<version>.dmg`, signed with a Developer ID, notarized and stapled
-(`SKIP_NOTARIZE=1` signs and packages without notarizing). Signing material stays in the keychain; nothing secret
-lives in the repository.
+Produces `build/release/Cluvia-<version>.dmg` and its `.sha256`, signed with a Developer ID, notarized and stapled.
+`SKIP_NOTARIZE=1` signs without notarizing; `UNSIGNED=1` builds an ad-hoc signed DMG. Signing material stays in the
+keychain; nothing secret lives in the repository.
