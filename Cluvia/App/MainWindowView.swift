@@ -4,6 +4,7 @@ import SwiftUI
 struct MainWindowView: View {
     @Environment(ClusterCatalogModel.self) private var catalog
     @Environment(AppSettingsStore.self) private var settings
+    @State private var whatsNew: ReleaseNotes.Release?
 
     var body: some View {
         NavigationSplitView {
@@ -19,7 +20,9 @@ struct MainWindowView: View {
             }
         }
         .frame(minWidth: 960, minHeight: 540)
+        .sheet(item: $whatsNew) { WhatsNewSheet(release: $0) }
         .task {
+            whatsNew = WhatsNew.releaseToShow()
             await catalog.reload()
             catalog.connectAutomatically(settings: settings)
             await catalog.checkAutomatically()

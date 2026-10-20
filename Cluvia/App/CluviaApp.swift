@@ -18,7 +18,13 @@ struct CluviaApp: App {
         .commands {
             BrowserCommands()
             ObjectCommands()
+            ReleaseNotesCommands()
         }
+
+        Window("Release Notes", id: "release-notes") {
+            ReleaseNotesWindow()
+        }
+        .defaultSize(width: 640, height: 640)
     }
 
     /// Debug-only: `-CluviaOpenContext <name>` opens a cluster window at launch for automated UI checks.

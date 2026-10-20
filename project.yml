@@ -24,7 +24,11 @@ targets:
   Cluvia:
     type: application
     platform: macOS
-    sources: [Cluvia]
+    sources:
+      - Cluvia
+      # Shown in the app as release notes and "What's New".
+      - path: CHANGELOG.md
+        buildPhase: resources
     dependencies:
       - package: KubeKit
       - package: HelmKit
@@ -36,7 +40,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.cluvia.Cluvia
         PRODUCT_NAME: Cluvia
-        MARKETING_VERSION: 0.1.0
+        MARKETING_VERSION: 0.1.0 # x-release-please-version
         CURRENT_PROJECT_VERSION: 1
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_CFBundleDisplayName: Cluvia
