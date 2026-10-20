@@ -16,6 +16,11 @@ permissions:
   contents: write
   pull-requests: write
 
+# One release run at a time; a queued run waits rather than cancelling a DMG build halfway.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
 jobs:
   release-please:
     if: github.event_name == 'push'
