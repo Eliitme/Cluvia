@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+    branches: [main, development]
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tools
+        run: |
+          brew install xcodegen
+          # The terminal renderer ships Metal shaders; Xcode 26 installs the Metal toolchain separately.
+          xcodebuild -downloadComponent MetalToolchain
+      - name: KubeKit unit tests
+        working-directory: Packages/KubeKit
+        run: swift test
+      - name: HelmKit unit tests
+        working-directory: Packages/HelmKit
+        run: swift test
+      - name: App build and tests
+        run: |
+          xcodegen generate
+          xcodebuild test -project Cluvia.xcodeproj -scheme Cluvia -destination 'platform=macOS' \
+            -skipPackagePluginValidation -derivedDataPath build/DerivedData

@@ -1,0 +1,35 @@
+name: Integration
+
+# Runs the suites that talk to a real cluster. Hosted macOS runners cannot run Docker, so this needs a
+# self-hosted macOS runner labelled `docker` with Docker, kind and helm installed.
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 3 * * 1"
+
+jobs:
+  kind:
+    runs-on: [self-hosted, macOS, docker]
+    timeout-minutes: 60
+    env:
+      CLUSTER: cluvia-ci
+      CLUVIA_IT_CONTEXT: kind-cluvia-ci
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cluster
+        run: |
+          kind get clusters | grep -qx "$CLUSTER" || kind create cluster --name "$CLUSTER" --wait 120s
+      - name: KubeKit integration tests
+        working-directory: Packages/KubeKit
+        run: swift test
+      - name: HelmKit integration tests
+        working-directory: Packages/HelmKit
+        run: swift test
+      - name: Disruptive checks (run alone)
+        working-directory: Packages/KubeKit
+        run: |
+          CLUVIA_IT_DRAIN=1 swift test --filter drainRespects
+          CLUVIA_IT_DISRUPT=1 swift test --filter recoversAfterApiServerRestart
+      - name: Delete cluster
+        if: always()
+        run: kind delete cluster --name "$CLUSTER"
