@@ -15,31 +15,31 @@ struct WorkspaceSidebarView: View {
         search.isEmpty ? catalog.contexts : catalog.contexts.filter { $0.name.localizedCaseInsensitiveContains(search) }
     }
 
-    /// Favorites, then one group per kubeconfig file; each context appears once.
-    private var groups: [(title: String, contexts: [ContextSummary])] {
+    /// Favorites, then one group per kubeconfig file (titled by file name, path in the tooltip); each context
+    /// appears once.
+    private var groups: [(title: String, help: String?, contexts: [ContextSummary])] {
         let favorites = visible.filter { settings.isFavorite($0.name) }
-        var result = favorites.isEmpty ? [] : [(title: "Favorites", contexts: favorites)]
+        var result = favorites.isEmpty ? [] : [(title: "Favorites", help: String?.none, contexts: favorites)]
         let others = visible.filter { !settings.isFavorite($0.name) }
         for file in catalog.files {
             let contexts = others.filter { catalog.contextSources[$0.name] == file }
-            if !contexts.isEmpty { result.append((title: Self.displayPath(file), contexts: contexts)) }
+            if !contexts.isEmpty { result.append((title: file.lastPathComponent, help: Self.displayPath(file), contexts: contexts)) }
         }
         return result
     }
 
     var body: some View {
         List(selection: selection) {
-            ForEach(groups, id: \.title) { group in
-                Section(group.title) {
-                    ForEach(group.contexts) { context in
-                        DisclosureGroup(isExpanded: expanded(context.name)) {
-                            if let session = catalog.sessions[context.name] {
-                                ClusterResourceTree(session: session)
-                            }
-                        } label: {
-                            ContextRow(context: context)
-                        }
-                        .tag(SidebarItem.context(context.name))
+            let groups = groups
+            // A single kubeconfig file needs no heading.
+            if groups.count == 1, let only = groups.first, only.help != nil {
+                rows(only.contexts)
+            } else {
+                ForEach(groups, id: \.title) { group in
+                    Section {
+                        rows(group.contexts)
+                    } header: {
+                        Text(group.title).help(group.help ?? "")
                     }
                 }
             }
@@ -61,6 +61,19 @@ struct WorkspaceSidebarView: View {
             Button("OK") {}
         } message: {
             Text(failure ?? "")
+        }
+    }
+
+    private func rows(_ contexts: [ContextSummary]) -> some View {
+        ForEach(contexts) { context in
+            DisclosureGroup(isExpanded: expanded(context.name)) {
+                if let session = catalog.sessions[context.name] {
+                    ClusterResourceTree(session: session)
+                }
+            } label: {
+                ContextRow(context: context, editing: $editing, failure: $failure)
+            }
+            .tag(SidebarItem.context(context.name))
         }
     }
 
@@ -124,8 +137,9 @@ struct WorkspaceSidebarView: View {
         }
     }
 
+    /// Opens a cluster and folds the others away, so the sidebar shows one cluster's kinds at a time.
     private func connect(_ name: String) {
-        collapsed.remove(name)
+        collapsed = Set(catalog.sessions.keys).subtracting([name])
         catalog.open(name, settings: settings)
     }
 

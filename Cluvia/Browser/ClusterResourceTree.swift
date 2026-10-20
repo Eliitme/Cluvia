@@ -24,13 +24,16 @@ struct ClusterResourceTree: View {
                 if !kinds.isEmpty {
                     DisclosureGroup(isExpanded: expanded(category)) {
                         ForEach(kinds) { kind in
+                            let count = session.counts[kind.gvr]
                             HStack {
                                 Text(kind.title).lineLimit(1)
                                 Spacer()
-                                if let count = session.counts[kind.gvr] {
+                                if let count {
                                     Text("\(count)").monospacedDigit().foregroundStyle(.secondary).font(.callout)
                                 }
                             }
+                            // Empty kinds recede so the ones with objects stand out.
+                            .opacity(count == 0 ? 0.45 : 1)
                             .help(kind.category == .customResources ? "\(kind.kind) (\(kind.gvr.groupVersion))" : kind.kind)
                             .tag(SidebarItem.kind(session.contextName, kind))
                         }

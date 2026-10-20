@@ -1,47 +1,82 @@
 import KubeKit
 import SwiftUI
 
-/// A context in the sidebar: connection state, name and whether it is kubectl's current context.
+/// A context in the sidebar: its badge with connection state, name, kubectl's current marker, and on hover a menu
+/// with the same actions as right-click.
 struct ContextRow: View {
     let context: ContextSummary
+    @Binding var editing: ContextEditing?
+    @Binding var failure: String?
     @Environment(ClusterCatalogModel.self) private var catalog
+    @State private var hovering = false
 
     var body: some View {
-        HStack(spacing: 6) {
-            Image(systemName: indicator.symbol).font(.system(size: 8)).foregroundStyle(indicator.color)
-            Text(context.name).lineLimit(1)
-            if context.isCurrent { Text("current").font(.caption).foregroundStyle(.secondary) }
+        HStack(spacing: 7) {
+            ClusterBadge(name: context.name)
+                .overlay(alignment: .bottomTrailing) {
+                    Circle()
+                        .fill(indicator.color)
+                        .overlay(Circle().strokeBorder(.background, lineWidth: 1.5))
+                        .frame(width: 8, height: 8)
+                        .offset(x: 3, y: 3)
+                        .opacity(indicator.visible ? 1 : 0)
+                }
+            Text(context.name).lineLimit(1).truncationMode(.middle)
+            if context.isCurrent {
+                Text("current").font(.caption2).foregroundStyle(.secondary)
+                    .help("kubectl's current context")
+            }
+            Spacer(minLength: 0)
+            if hovering {
+                Menu {
+                    ContextRowMenu(context: context, editing: $editing, failure: $failure)
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .accessibilityLabel("Actions for \(context.name)")
+            }
         }
+        .contentShape(Rectangle())
+        .onHover { hovering = $0 }
         .help(tooltip)
     }
 
-    private var indicator: (symbol: String, color: Color) {
+    /// Connected (teal), connecting (orange), failed or unreachable (red); idle clusters show no dot.
+    private var indicator: (color: Color, visible: Bool) {
         if let session = catalog.sessions[context.name] {
             return switch session.state {
-            case .connected: ("circle.fill", .green)
-            case .disconnected, .connecting: ("circle.dotted", .orange)
-            case .failed: ("circle.fill", .red)
+            case .connected: (.brandTeal, true)
+            case .disconnected, .connecting: (.orange, true)
+            case .failed: (.red, true)
             }
         }
-        return switch catalog.health[context.name] ?? .unknown {
-        case .unreachable: ("circle", .red)
-        default: ("circle", .secondary)
-        }
+        if case .unreachable = catalog.health[context.name] { return (.red, true) }
+        return (.clear, false)
     }
 
     private var tooltip: String {
         var lines = [context.server ?? "No server", "Namespace: \(context.namespace ?? "default")"]
-        switch catalog.health[context.name] ?? .unknown {
-        case let .reachable(version, nodes): lines.append("\(version) · \(nodes) node\(nodes == 1 ? "" : "s")")
-        case let .unreachable(reason): lines.append("Unreachable: \(reason)")
-        case .unknown, .checking: break
+        if let session = catalog.sessions[context.name] {
+            switch session.state {
+            case .connected: lines.append("Connected")
+            case .disconnected, .connecting: lines.append("Connecting…")
+            case let .failed(reason): lines.append("Cannot connect: \(reason)")
+            }
+        } else {
+            switch catalog.health[context.name] ?? .unknown {
+            case let .reachable(version, nodes): lines.append("Reachable · \(version) · \(nodes) node\(nodes == 1 ? "" : "s")")
+            case let .unreachable(reason): lines.append("Unreachable: \(reason)")
+            case .unknown, .checking: break
+            }
         }
-        if case let .failed(reason) = catalog.sessions[context.name]?.state { lines.append(reason) }
         return lines.joined(separator: "\n")
     }
 }
 
-/// Right-click actions for a context row.
+/// Actions for a context row, shared by right-click and the hover menu.
 struct ContextRowMenu: View {
     let context: ContextSummary
     @Binding var editing: ContextEditing?

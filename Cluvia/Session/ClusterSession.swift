@@ -30,7 +30,8 @@ final class ClusterSession {
     /// The Helm releases page is shown instead of a resource table.
     var showingHelm = false
     /// Resource groups opened in the sidebar.
-    var expandedCategories: Set<ResourceCategory> = [.cluster, .workloads]
+    /// Starts with only the selected kind's group open (see `selectedKind`).
+    var expandedCategories: Set<ResourceCategory> = []
     let helm: HelmReleasesModel
     let prometheus: PrometheusModel
     @ObservationIgnored let searchIndex = GlobalSearchIndex()
