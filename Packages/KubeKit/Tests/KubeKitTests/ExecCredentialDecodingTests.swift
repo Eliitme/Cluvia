@@ -20,8 +20,8 @@ struct ExecCredentialDecodingTests {
     }
 
     @Test func parsesFractionalSecondTimestamps() {
-        #expect(ExecCredentialProvider.parseTimestamp("2030-01-02T03:04:05.123Z") != nil)
-        #expect(ExecCredentialProvider.parseTimestamp("garbage") == nil)
+        #expect(KubeTimestamp.parse("2030-01-02T03:04:05.123Z") != nil)
+        #expect(KubeTimestamp.parse("garbage") == nil)
     }
 
     @Test(arguments: [#"{"kind":"ExecCredential"}"#, #"{"status":{}}"#, "not json"])

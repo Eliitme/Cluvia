@@ -40,4 +40,13 @@ CLUVIA_IT_CONTEXT=kind-cluvia-dev swift test
 CLUVIA_IT_CONTEXT=kind-cluvia-dev CLUVIA_IT_WATCH_SECONDS=310 swift test --filter watchStreamStaysOpen
 ```
 
-The integration suite creates a `cluvia-it-echo` busybox pod in the `default` namespace.
+The integration suite creates a `cluvia-it-echo` busybox pod in `default` and objects in the `cluvia-it` namespace.
+
+Opt-in checks:
+
+```sh
+# API server restart recovery (kind only; restarts the node container, run it alone)
+CLUVIA_IT_CONTEXT=kind-cluvia-dev CLUVIA_IT_DISRUPT=1 swift test --filter recoversAfterApiServerRestart
+# 5k-pod list/memory budget against a namespace holding ~5000 pods
+CLUVIA_IT_CONTEXT=kind-cluvia-dev CLUVIA_IT_SCALE_NAMESPACE=cluvia-scale swift test -c release --filter WatchCacheScale
+```

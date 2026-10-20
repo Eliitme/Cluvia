@@ -115,7 +115,7 @@ public actor ExecCredentialProvider: CredentialProvider {
         guard credentials.bearerToken != nil || credentials.identity != nil else {
             throw ExecPluginError.invalidOutput(command: command, reason: "status has neither token nor client certificate")
         }
-        return (credentials, status.expirationTimestamp.flatMap(parseTimestamp))
+        return (credentials, status.expirationTimestamp.flatMap(KubeTimestamp.parse))
     }
 
     /// The plugin receives no TTY, so it is told the session is non-interactive.
@@ -136,12 +136,5 @@ public actor ExecCredentialProvider: CredentialProvider {
         ]
         let data = (try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])) ?? Data()
         return String(decoding: data, as: UTF8.self)
-    }
-
-    static func parseTimestamp(_ value: String) -> Date? {
-        let formatter = ISO8601DateFormatter()
-        if let date = formatter.date(from: value) { return date }
-        formatter.formatOptions.insert(.withFractionalSeconds)
-        return formatter.date(from: value)
     }
 }
