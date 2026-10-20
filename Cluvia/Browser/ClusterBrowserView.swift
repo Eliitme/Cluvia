@@ -8,13 +8,13 @@ struct ClusterBrowserView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if session.dock.isVisible {
-                VSplitView {
-                    browser.frame(minHeight: 200)
+            // One structure whether or not the bottom panel shows: switching between a split and a bare browser
+            // rebuilt the browser (table, watches, inspector) on every toggle, which made the window jump and flash.
+            VSplitView {
+                browser.frame(minHeight: 200, maxHeight: .infinity)
+                if session.dock.isVisible {
                     DockView(dock: session.dock, portForwards: session.portForwards).frame(minHeight: 140, idealHeight: 280)
                 }
-            } else {
-                browser
             }
             Divider()
             StatusBarView(session: session)

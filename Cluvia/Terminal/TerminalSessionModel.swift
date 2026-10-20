@@ -20,6 +20,10 @@ final class TerminalSessionModel: Identifiable {
     @ObservationIgnored private var bridge: TerminalBridge?
     @ObservationIgnored private var task: Task<Void, Never>?
     @ObservationIgnored private var pendingResize: Task<Void, Never>?
+    /// Size last sent to the shell. Each resize makes the shell redraw its prompt, so unchanged sizes are not resent.
+    @ObservationIgnored private var sentSize: (columns: Int, rows: Int)?
+    /// Set once the terminal view has been laid out at its real size.
+    @ObservationIgnored private var laidOut = false
     /// Keystrokes go through one ordered queue; separate Tasks per keystroke could reach the session out of order.
     @ObservationIgnored private let input: AsyncStream<Data>.Continuation
     @ObservationIgnored private let inputStream: AsyncStream<Data>
@@ -56,7 +60,12 @@ final class TerminalSessionModel: Identifiable {
                 return
             }
             self?.status = .running
-            if let terminal = self?.terminalView.getTerminal() {
+            // The first size goes out once layout has settled (briefly waited for); sending the placeholder size
+            // first and the real one after made the shell print its prompt twice.
+            for _ in 0..<10 where self?.laidOut == false { try? await Task.sleep(for: .milliseconds(50)) }
+            if let self {
+                let terminal = self.terminalView.getTerminal()
+                self.sentSize = (terminal.cols, terminal.rows)
                 await session.resize(columns: terminal.cols, rows: terminal.rows)
             }
             // Typed-ahead input waits in the stream until the connection is up.
@@ -85,10 +94,13 @@ final class TerminalSessionModel: Identifiable {
     /// Layout reports several sizes in a row; only the settled one is sent (each resize makes shells redraw).
     func resize(columns: Int, rows: Int) {
         let session = session
+        laidOut = true
         pendingResize?.cancel()
         pendingResize = Task {
             try? await Task.sleep(for: .milliseconds(150))
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled, status == .running else { return }
+            if let sent = sentSize, sent == (columns, rows) { return }
+            sentSize = (columns, rows)
             await session.resize(columns: columns, rows: rows)
         }
     }
