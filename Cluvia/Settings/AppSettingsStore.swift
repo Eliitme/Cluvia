@@ -6,6 +6,18 @@ struct AppSettings: Codable, Equatable {
     var favoriteContexts: Set<String> = []
     /// Selected namespaces per context; empty means all namespaces.
     var namespacesByContext: [String: [String]] = [:]
+    /// Manually chosen Prometheus (`namespace/service:port`) per context, overriding auto-detection.
+    var prometheusByContext: [String: String] = [:]
+
+    init() {}
+
+    init(from decoder: Decoder) throws {
+        // Fields added in later versions default when absent, so older settings files keep loading.
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        favoriteContexts = try c.decodeIfPresent(Set<String>.self, forKey: .favoriteContexts) ?? []
+        namespacesByContext = try c.decodeIfPresent([String: [String]].self, forKey: .namespacesByContext) ?? [:]
+        prometheusByContext = try c.decodeIfPresent([String: String].self, forKey: .prometheusByContext) ?? [:]
+    }
 }
 
 @MainActor @Observable
@@ -40,6 +52,14 @@ final class AppSettingsStore {
 
     func setNamespaces(_ namespaces: Set<String>, for context: String) {
         update { $0.namespacesByContext[context] = namespaces.isEmpty ? nil : namespaces.sorted() }
+    }
+
+    func prometheus(for context: String) -> String? {
+        settings.prometheusByContext[context]
+    }
+
+    func setPrometheus(_ endpoint: String?, for context: String) {
+        update { $0.prometheusByContext[context] = endpoint.flatMap { $0.isEmpty ? nil : $0 } }
     }
 
     private func update(_ change: (inout AppSettings) -> Void) {

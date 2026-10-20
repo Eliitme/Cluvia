@@ -144,4 +144,19 @@ struct WatchCacheIntegrationTests {
         let pods = try await metrics.podUsage(namespace: "kube-system")
         #expect(pods.keys.contains { $0.name.hasPrefix("kube-apiserver") })
     }
+
+    /// Opt-in (`CLUVIA_IT_PROMETHEUS=1`): needs a Prometheus server scraping cAdvisor in the cluster.
+    @Test(.enabled(if: IntegrationCluster.environment["CLUVIA_IT_PROMETHEUS"] == "1"))
+    func prometheusDetectionAndRangeQueries() async throws {
+        let client = try Self.client()
+        let endpoint = try #require(await PrometheusClient.detect(client: client))
+        let prometheus = PrometheusClient(client: client, endpoint: endpoint)
+        let pods = try await client.list(.pods, namespace: "kube-system").items
+        let apiserver = try #require(pods.first { $0.name.hasPrefix("kube-apiserver") })
+        let cpu = try await prometheus.range(MetricQueries.podCPU(namespace: "kube-system", podRegex: apiserver.name), window: .seconds(600))
+        #expect(!cpu.isEmpty && cpu.allSatisfy { $0.value >= 0 })
+        let node = try #require(try await client.list(ResourceActionsCore.nodes).items.first?.name)
+        let memory = try await prometheus.range(MetricQueries.nodeMemory(node), window: .seconds(600))
+        #expect(memory.contains { $0.value > 1_000_000 })
+    }
 }

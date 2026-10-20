@@ -28,6 +28,7 @@ final class ClusterSession {
     /// The Helm releases page is shown instead of a resource table.
     var showingHelm = false
     let helm: HelmReleasesModel
+    let prometheus: PrometheusModel
     var selectedObject: ObjectKey?
     let dock = DockModel()
     let portForwards = PortForwardManager()
@@ -52,6 +53,7 @@ final class ClusterSession {
         self.contextName = contextName
         self.settings = settings
         helm = HelmReleasesModel(contextName: contextName)
+        prometheus = PrometheusModel(contextName: contextName, settings: settings)
         selectedNamespaces = settings.namespaces(for: contextName)
     }
 

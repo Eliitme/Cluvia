@@ -29,6 +29,9 @@ struct OverviewView: View {
             KindSpecificSections(object: object, revealSecrets: $revealSecrets) { action, container in
                 session.open(action, pod: object, container: container)
             }
+            if MetricsChartsSection.supportedKinds.contains(object.kind ?? "") {
+                MetricsChartsSection(session: session, object: object)
+            }
             ConditionsSection(conditions: object.json[path: "status", "conditions"]?.arrayValue ?? [])
         }
     }
