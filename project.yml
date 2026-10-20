@@ -41,3 +41,25 @@ targets:
           # Xcode skips the runtime flag for ad-hoc signatures; force it so unsigned release builds still
           # exercise hardened-runtime behavior. Debug keeps the default so the preview dylib can load.
           OTHER_CODE_SIGN_FLAGS: "--options=runtime"
+  CluviaTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources: [CluviaTests]
+    dependencies:
+      - target: Cluvia
+      - package: KubeKit
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        BUNDLE_LOADER: $(TEST_HOST)
+        TEST_HOST: $(BUILT_PRODUCTS_DIR)/Cluvia.app/Contents/MacOS/Cluvia
+        CODE_SIGN_IDENTITY: "-"
+        CODE_SIGN_STYLE: Manual
+schemes:
+  Cluvia:
+    build:
+      targets:
+        Cluvia: all
+        CluviaTests: [test]
+    test:
+      targets: [CluviaTests]
