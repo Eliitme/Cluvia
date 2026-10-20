@@ -7,34 +7,22 @@ struct CluviaApp: App {
     @State private var settings = AppSettingsStore()
 
     var body: some Scene {
-        Window("Clusters", id: "catalog") {
-            ClusterCatalogView()
+        // One window: clusters in the sidebar, the selected one in the detail area.
+        Window("Cluvia", id: "main") {
+            MainWindowView()
                 .environment(catalog)
                 .environment(settings)
-                .frame(minWidth: 760, minHeight: 360)
                 .task { openLaunchContext() }
-        }
-        .defaultSize(width: 960, height: 520)
-
-        WindowGroup("Cluster", for: String.self) { $contextName in
-            if let contextName {
-                ClusterWindow(contextName: contextName)
-                    .environment(catalog)
-                    .environment(settings)
-            }
         }
         .defaultSize(width: 1280, height: 800)
         .commands { BrowserCommands() }
     }
 
-    @Environment(\.openWindow) private var openWindow
-
     /// Debug-only: `-CluviaOpenContext <name>` opens a cluster window at launch for automated UI checks.
     private func openLaunchContext() {
         #if DEBUG
         if let context = UserDefaults.standard.string(forKey: "CluviaOpenContext") {
-            catalog.markRequested(context)
-            openWindow(value: context)
+            catalog.open(context, settings: settings)
         }
         #endif
     }

@@ -2,7 +2,7 @@ import Foundation
 import KubeKit
 import Observation
 
-/// One connected cluster window: transport, discovery, shared watches and the user's browsing state.
+/// One opened cluster: transport, discovery, shared watches and the user's browsing state.
 @MainActor @Observable
 final class ClusterSession {
     enum State: Equatable {
@@ -23,10 +23,14 @@ final class ClusterSession {
         didSet {
             showingHelm = false
             if selectedKind != oldValue { selectedObject = nil }
+            // Keep the selected kind visible in the sidebar, e.g. after picking it from the palette.
+            if let category = selectedKind?.category { expandedCategories.insert(category) }
         }
     }
     /// The Helm releases page is shown instead of a resource table.
     var showingHelm = false
+    /// Resource groups opened in the sidebar.
+    var expandedCategories: Set<ResourceCategory> = [.cluster, .workloads]
     let helm: HelmReleasesModel
     let prometheus: PrometheusModel
     @ObservationIgnored let searchIndex = GlobalSearchIndex()

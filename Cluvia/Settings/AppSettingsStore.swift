@@ -62,6 +62,19 @@ final class AppSettingsStore {
         update { $0.prometheusByContext[context] = endpoint.flatMap { $0.isEmpty ? nil : $0 } }
     }
 
+    /// Carries a context's preferences over when it is renamed in the kubeconfig; nil `new` forgets them (deleted).
+    func moveContext(_ old: String, to new: String?) {
+        update { settings in
+            let favorite = settings.favoriteContexts.remove(old) != nil
+            let namespaces = settings.namespacesByContext.removeValue(forKey: old)
+            let prometheus = settings.prometheusByContext.removeValue(forKey: old)
+            guard let new else { return }
+            if favorite { settings.favoriteContexts.insert(new) }
+            settings.namespacesByContext[new] = namespaces
+            settings.prometheusByContext[new] = prometheus
+        }
+    }
+
     private func update(_ change: (inout AppSettings) -> Void) {
         var next = settings
         change(&next)

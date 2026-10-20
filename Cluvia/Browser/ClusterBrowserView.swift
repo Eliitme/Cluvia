@@ -1,27 +1,23 @@
 import KubeKit
 import SwiftUI
 
-/// Connected cluster: category sidebar, resource table, detail inspector and status bar.
+/// Connected cluster: resource table, detail inspector, bottom panel and status bar. Its resource kinds are listed
+/// in the main window's sidebar.
 struct ClusterBrowserView: View {
     @Bindable var session: ClusterSession
 
     var body: some View {
-        NavigationSplitView {
-            ClusterSidebarView(session: session)
-                .navigationSplitViewColumnWidth(min: 200, ideal: 230, max: 320)
-        } detail: {
-            VStack(spacing: 0) {
-                if session.dock.isVisible {
-                    VSplitView {
-                        browser.frame(minHeight: 200)
-                        DockView(dock: session.dock, portForwards: session.portForwards).frame(minHeight: 140, idealHeight: 280)
-                    }
-                } else {
-                    browser
+        VStack(spacing: 0) {
+            if session.dock.isVisible {
+                VSplitView {
+                    browser.frame(minHeight: 200)
+                    DockView(dock: session.dock, portForwards: session.portForwards).frame(minHeight: 140, idealHeight: 280)
                 }
-                Divider()
-                StatusBarView(session: session)
+            } else {
+                browser
             }
+            Divider()
+            StatusBarView(session: session)
         }
         .modifier(ActionSheetsModifier(session: session))
     }
@@ -43,7 +39,7 @@ struct ClusterBrowserView: View {
 struct ActionSheetsModifier: ViewModifier {
     @Bindable var session: ClusterSession
     @Environment(ClusterCatalogModel.self) private var catalog
-    @Environment(\.openWindow) private var openWindow
+    @Environment(AppSettingsStore.self) private var settings
 
     private func runPaletteCommand() {
         guard let command = session.paletteCommand else { return }
@@ -51,9 +47,7 @@ struct ActionSheetsModifier: ViewModifier {
         switch command {
         case let .selectKind(kind): session.selectedKind = kind
         case let .selectNamespace(namespace): session.selectedNamespaces = namespace.map { [$0] } ?? []
-        case let .openContext(name):
-            catalog.markRequested(name)
-            openWindow(value: name)
+        case let .openContext(name): catalog.open(name, settings: settings)
         case let .reveal(kind, key): session.reveal(kind, key)
         case let .action(action, kind, key): session.request(action, kind: kind, key: key)
         case let .create(kind): session.createResource(of: kind)

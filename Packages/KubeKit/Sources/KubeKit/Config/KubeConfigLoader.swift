@@ -17,9 +17,20 @@ public enum KubeConfigLoaderError: Error, LocalizedError, Sendable {
 public struct KubeConfigLoadResult: Sendable {
     public var configs: [KubeConfig]
     public var errors: [KubeConfigLoaderError]
+    /// File each entry of `configs` was read from, index for index.
+    public var sources: [URL] = []
+
+    /// The file defining each context, honoring the first-file-wins rule.
+    public var contextSources: [String: URL] {
+        var result: [String: URL] = [:]
+        for (config, url) in zip(configs, sources) {
+            for context in config.contexts where result[context.name] == nil { result[context.name] = url }
+        }
+        return result
+    }
 }
 
-/// Reads kubeconfig files (read-only; files are never written back).
+/// Reads kubeconfig files for connecting. Edits go through `KubeConfigDocument`, which keeps unmodeled fields.
 public enum KubeConfigLoader {
     /// Files kubectl would read: the `KUBECONFIG` list if set, otherwise `~/.kube/config`.
     public static func defaultFileURLs(environment: [String: String], home: URL = FileManager.default.homeDirectoryForCurrentUser) -> [URL] {
@@ -37,6 +48,7 @@ public enum KubeConfigLoader {
             guard seen.insert(path).inserted, FileManager.default.fileExists(atPath: path) else { continue }
             do {
                 result.configs.append(try load(contentsOf: url))
+                result.sources.append(url)
             } catch let error as KubeConfigLoaderError {
                 result.errors.append(error)
             } catch {

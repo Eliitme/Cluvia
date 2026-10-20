@@ -12,7 +12,7 @@ public struct ContextSummary: Sendable, Hashable, Identifiable {
 }
 
 /// A context with its cluster and user looked up, ready to build a transport.
-public struct ResolvedContext: Sendable {
+public struct ResolvedContext: Sendable, Equatable {
     public let name: String
     public let clusterName: String
     public let cluster: Cluster
