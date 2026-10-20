@@ -54,6 +54,7 @@ struct ResourceBrowserView: View {
                 ToolbarItem { if kind.namespaced { NamespacePicker(session: session) } }
                 ToolbarItem {
                     Button { session.showInspector.toggle() } label: { Label("Details", systemImage: "sidebar.right") }
+                        .disabled(session.selectedObject == nil)
                         .keyboardShortcut("i", modifiers: [.command, .option])
                 }
             }
@@ -82,19 +83,16 @@ struct ResourceBrowserView: View {
             table(rows)
                 .overlay { overlay(rowCount: rows.count) }
                 .safeAreaInset(edge: .bottom, spacing: 0) { phaseBanner }
-                .frame(minWidth: 360, maxWidth: .infinity)
-            if session.showInspector {
-                Group {
-                    if let key = session.selectedObject, let row = rows.first(where: { $0.id == key }) {
-                        ResourceDetailView(session: session, kind: kind, row: row)
-                            .id(row.id) // fresh model per object: never show the previous object's data or hide its error
-                    } else {
-                        ContentUnavailableView("No Selection", systemImage: "sidebar.right")
-                    }
-                }
-                .frame(minWidth: 320, idealWidth: 420, maxWidth: 700)
+                .frame(minWidth: 360, maxWidth: .infinity, maxHeight: .infinity)
+            // Shown only for a selected object; an empty panel would take half the window for nothing.
+            if session.showInspector, let key = session.selectedObject, let row = rows.first(where: { $0.id == key }) {
+                ResourceDetailView(session: session, kind: kind, row: row)
+                    .id(row.id) // fresh model per object: never show the previous object's data or hide its error
+                    .frame(minWidth: 320, maxWidth: 560, maxHeight: .infinity)
             }
         }
+        // A split sizes to its children's ideal height; an empty state has none, which would shrink the whole browser.
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private func table(_ rows: [ResourceTableRow]) -> ResourceTableView {
