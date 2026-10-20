@@ -38,6 +38,9 @@ struct ConfirmActionSheet: View {
                     }
                 }
                 .disabled(busy)
+                // Destructive confirmations read as such: macOS draws a destructive role like any other button.
+                .buttonStyle(.borderedProminent)
+                .tint(pending.action == .delete ? .red : .accentColor)
             }
         }
         .padding(20)

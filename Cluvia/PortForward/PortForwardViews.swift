@@ -38,6 +38,8 @@ struct ForwardPortSheet: View {
     let start: (Int, UInt16?) async -> String?
     @Environment(\.dismiss) private var dismiss
     @State private var remotePort = 0
+    /// Typed remote port when the target declares none; empty rather than a misleading "0".
+    @State private var typedPort = ""
     @State private var localPort = ""
     @State private var error: String?
     @State private var busy = false
@@ -47,7 +49,8 @@ struct ForwardPortSheet: View {
             Label("Forward Port", systemImage: "arrow.left.arrow.right").font(.title3.weight(.semibold))
             TargetSummary(kind: pending.kind, key: pending.key, contextName: contextName)
             if ports.isEmpty {
-                TextField("Remote port", value: $remotePort, format: .number.grouping(.never))
+                TextField("Remote port", text: $typedPort, prompt: Text("e.g. 8080"))
+                    .onChange(of: typedPort) { remotePort = Int($1.trimmingCharacters(in: .whitespaces)) ?? 0 }
             } else {
                 Picker("Remote port", selection: $remotePort) {
                     ForEach(ports, id: \.self) { Text(String($0)).tag($0) }

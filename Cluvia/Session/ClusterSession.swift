@@ -142,6 +142,11 @@ final class ClusterSession {
         counts = results
     }
 
+    /// Keeps the sidebar count of the kind on screen in step with its live table, between periodic recounts.
+    func updateCount(_ gvr: GroupVersionResource, _ count: Int) {
+        if counts[gvr] != count { counts[gvr] = count }
+    }
+
     /// Jumps to another object, e.g. from an owner reference.
     func reveal(_ kind: ResourceKind, _ key: ObjectKey) {
         selectedKind = kind

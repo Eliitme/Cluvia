@@ -76,7 +76,8 @@ struct MetricsChartsSection: View {
         VStack(alignment: .leading, spacing: 2) {
             Text("\(title)\(points.last.map { " · \(format($0.value))" } ?? "")").font(.caption).foregroundStyle(.secondary)
             Chart(points, id: \.date) { LineMark(x: .value("Time", $0.date), y: .value(title, $0.value)) }
-                .chartYAxis { AxisMarks { value in AxisValueLabel { Text(value.as(Double.self).map(format) ?? "") } } }
+                // Few marks: tiny values would otherwise repeat the same rounded label ("0m 0m 0m").
+                .chartYAxis { AxisMarks(values: .automatic(desiredCount: 3)) { value in AxisValueLabel { Text(value.as(Double.self).map(format) ?? "") } } }
                 .frame(height: 72)
         }
     }

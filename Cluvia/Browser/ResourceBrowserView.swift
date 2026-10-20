@@ -59,6 +59,10 @@ struct ResourceBrowserView: View {
                 }
             }
             .navigationSubtitle("\(kind.title) · \(rows.count)")
+            .onChange(of: stores.reduce(0) { $0 + $1.items.count }) { _, total in
+                guard stores.allSatisfy({ $0.phase == .live }) else { return }
+                session.updateCount(kind.gvr, total)
+            }
             .onChange(of: session.selectedObject, initial: true) { _, selected in
                 if selected != nil { session.showInspector = true }
             }
