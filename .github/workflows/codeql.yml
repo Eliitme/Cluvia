@@ -1,7 +1,7 @@
 name: CodeQL
 
 # The default setup's autobuild only finds the Swift packages (the Xcode project is generated from project.yml), so
-# it scanned 47 of 160 Swift files and took ~12 minutes. This builds the whole app once, for one architecture,
+# it scanned 47 of 160 Swift files and took ~12 minutes. This builds the whole app once, for the active architecture,
 # without signing, so every Swift file is analyzed.
 on:
   push:
@@ -42,13 +42,16 @@ jobs:
             runner: macos-26
     steps:
       - uses: actions/checkout@v7
-      # Tools go in before CodeQL starts tracing builds: under its tracer Homebrew runs as Rosetta and refuses.
-      - name: Tools
+      # Everything but the compile happens before CodeQL starts tracing: its tracer runs commands under Rosetta,
+      # where Homebrew refuses to install and package resolution takes minutes.
+      - name: Tools and dependencies
         if: matrix.build-mode == 'manual'
         run: |
           brew install xcodegen
           xcodebuild -downloadComponent MetalToolchain
           xcodegen generate
+          xcodebuild -resolvePackageDependencies -project Cluvia.xcodeproj -scheme Cluvia \
+            -clonedSourcePackagesDirPath build/SourcePackages -skipPackagePluginValidation
       - uses: github/codeql-action/init@v4
         with:
           languages: ${{ matrix.language }}
@@ -56,8 +59,10 @@ jobs:
       - name: Build
         if: matrix.build-mode == 'manual'
         run: |
+          # No arch in the destination: under the tracer the active architecture is x86_64.
           xcodebuild build -project Cluvia.xcodeproj -scheme Cluvia -configuration Debug \
-            -destination 'platform=macOS,arch=arm64' -skipPackagePluginValidation \
+            -destination 'platform=macOS' -clonedSourcePackagesDirPath build/SourcePackages \
+            -disableAutomaticPackageResolution -skipPackagePluginValidation \
             ONLY_ACTIVE_ARCH=YES CODE_SIGNING_ALLOWED=NO COMPILER_INDEX_STORE_ENABLE=NO
       - uses: github/codeql-action/analyze@v4
         with:
