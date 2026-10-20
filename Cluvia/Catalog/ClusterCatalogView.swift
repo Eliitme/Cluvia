@@ -53,10 +53,15 @@ struct ClusterCatalogView: View {
         .searchable(text: $search, placement: .toolbar, prompt: "Filter contexts")
         .overlay {
             if catalog.contexts.isEmpty, !catalog.isLoading {
-                ContentUnavailableView(
-                    "No Kubernetes Contexts", systemImage: "server.rack",
-                    description: Text(catalog.loadErrors.first ?? "No contexts found in ~/.kube/config or KUBECONFIG.")
-                )
+                ContentUnavailableView {
+                    Label {
+                        Text("No Kubernetes Contexts")
+                    } icon: {
+                        Image("BrandMark").resizable().scaledToFit().frame(width: 72)
+                    }
+                } description: {
+                    Text(catalog.loadErrors.first ?? "No contexts found in ~/.kube/config or KUBECONFIG.")
+                }
             }
         }
         .toolbar {
