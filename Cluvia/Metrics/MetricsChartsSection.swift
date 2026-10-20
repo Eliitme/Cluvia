@@ -33,9 +33,14 @@ struct MetricsChartsSection: View {
             HStack {
                 Text("Usage (last hour)").font(.headline)
                 Spacer()
-                Button(sourceLabel) { override = session.prometheus.endpoint?.description ?? ""; editing = true }
-                    .buttonStyle(.link)
-                    .font(.caption)
+                // The data source matters only when it is wrong; a quiet button keeps it out of the way.
+                Button { override = session.prometheus.endpoint?.description ?? ""; editing = true } label: {
+                    Image(systemName: "gearshape")
+                }
+                .buttonStyle(.borderless)
+                .foregroundStyle(.secondary)
+                .help("Prometheus: \(sourceLabel)")
+                .accessibilityLabel("Prometheus Source")
             }
             switch session.prometheus.state {
             case .unknown, .detecting:
@@ -44,8 +49,9 @@ struct MetricsChartsSection: View {
                 Text("No Prometheus found. Set one with the link above.").foregroundStyle(.secondary).font(.callout)
             case .available:
                 if let error { Text(error).foregroundStyle(.secondary).font(.callout) }
-                chart("CPU", points: cpu) { Quantity.formatCPU($0) }
-                chart("Memory", points: memory) { Quantity.formatMemory($0) }
+                // Empty series are left out rather than drawn as blank frames.
+                if !cpu.isEmpty { chart("CPU", points: cpu) { Quantity.formatCPU($0) } }
+                if !memory.isEmpty { chart("Memory", points: memory) { Quantity.formatMemory($0) } }
             }
         }
         .task(id: "\(object.uid ?? "")|\(session.prometheus.endpoint?.description ?? "")") { await load() }
@@ -71,7 +77,7 @@ struct MetricsChartsSection: View {
             Text("\(title)\(points.last.map { " · \(format($0.value))" } ?? "")").font(.caption).foregroundStyle(.secondary)
             Chart(points, id: \.date) { LineMark(x: .value("Time", $0.date), y: .value(title, $0.value)) }
                 .chartYAxis { AxisMarks { value in AxisValueLabel { Text(value.as(Double.self).map(format) ?? "") } } }
-                .frame(height: 90)
+                .frame(height: 72)
         }
     }
 

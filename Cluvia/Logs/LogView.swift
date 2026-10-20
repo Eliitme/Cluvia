@@ -131,6 +131,7 @@ struct LogTextView: NSViewRepresentable {
             rescanFrom = 0
             countedUpTo = 0
         }
+        if let recolorFrom { LogLevelColoring.apply(to: storage, from: recolorFrom) }
         if model.isMultiPod, let recolorFrom {
             let order = Dictionary(model.sources.enumerated().map { ($1.pod, $0) }, uniquingKeysWith: { first, _ in first })
             Self.colorPodPrefixes(in: storage, from: recolorFrom, order: order)
