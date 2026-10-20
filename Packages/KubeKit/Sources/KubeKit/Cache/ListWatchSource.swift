@@ -4,9 +4,9 @@ import Foundation
 public struct ListSnapshot<Item: Sendable>: Sendable {
     public var items: [(key: ObjectKey, item: Item)]
     public var resourceVersion: String
-    public var columns: [TableColumn]
+    public var columns: [ResourceTableColumn]
 
-    public init(items: [(key: ObjectKey, item: Item)], resourceVersion: String, columns: [TableColumn] = []) {
+    public init(items: [(key: ObjectKey, item: Item)], resourceVersion: String, columns: [ResourceTableColumn] = []) {
         self.items = items
         self.resourceVersion = resourceVersion
         self.columns = columns
@@ -43,12 +43,12 @@ public struct TableListWatchSource: ListWatchSource {
         self.options = options
     }
 
-    public func list() async throws -> ListSnapshot<TableRow> {
+    public func list() async throws -> ListSnapshot<ResourceTableRow> {
         let table = try await client.listTable(gvr, namespace: namespace, options: options)
         return ListSnapshot(items: table.rows.map { ($0.id, $0) }, resourceVersion: table.resourceVersion ?? "", columns: table.columns)
     }
 
-    public func watch(from resourceVersion: String) -> AsyncThrowingStream<SourceEvent<TableRow>, Error> {
+    public func watch(from resourceVersion: String) -> AsyncThrowingStream<SourceEvent<ResourceTableRow>, Error> {
         let upstream = client.watch(gvr, namespace: namespace, resourceVersion: resourceVersion, options: options, table: true)
         return AsyncThrowingStream { continuation in
             let task = Task {
@@ -67,7 +67,7 @@ public struct TableListWatchSource: ListWatchSource {
 
     /// Table watch events wrap the changed object in a one-row Table. Bookmarks also carry a placeholder row
     /// without a name, so they must never be treated as data.
-    static func convert(_ event: WatchEvent<JSONValue>) throws -> [SourceEvent<TableRow>] {
+    static func convert(_ event: WatchEvent<JSONValue>) throws -> [SourceEvent<ResourceTableRow>] {
         switch event {
         case let .added(json), let .modified(json):
             let table = ResourceTable(json)

@@ -10,6 +10,17 @@ public struct APIResourceInfo: Sendable, Hashable, Identifiable {
     /// True for the group's preferred version; browsing uses only preferred versions.
     public let preferred: Bool
 
+    public init(
+        gvr: GroupVersionResource, kind: String, namespaced: Bool, verbs: Set<String>, shortNames: [String], preferred: Bool
+    ) {
+        self.gvr = gvr
+        self.kind = kind
+        self.namespaced = namespaced
+        self.verbs = verbs
+        self.shortNames = shortNames
+        self.preferred = preferred
+    }
+
     public var id: GroupVersionResource { gvr }
     public var isListable: Bool { verbs.contains("list") }
     public var isWatchable: Bool { verbs.contains("watch") }

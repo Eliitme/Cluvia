@@ -4,6 +4,7 @@ import Testing
 @testable import KubeKit
 
 /// Budget check against a namespace holding ~5k pods. Opt-in: `CLUVIA_IT_SCALE_NAMESPACE=<namespace>`.
+/// Footprint is process-wide, so run it on its own (`--filter WatchCacheScale`) for a meaningful number.
 @Suite(.enabled(if: IntegrationCluster.isEnabled && IntegrationCluster.environment["CLUVIA_IT_SCALE_NAMESPACE"] != nil))
 struct WatchCacheScaleIntegrationTests {
     static var namespace: String { IntegrationCluster.environment["CLUVIA_IT_SCALE_NAMESPACE"] ?? "" }

@@ -3,8 +3,8 @@ import Foundation
 /// Server-side printed list (`meta.k8s.io/v1 Table`): the same columns `kubectl get` shows, including CRD
 /// `additionalPrinterColumns`, so the client needs no per-kind column knowledge.
 public struct ResourceTable: Sendable {
-    public var columns: [TableColumn]
-    public var rows: [TableRow]
+    public var columns: [ResourceTableColumn]
+    public var rows: [ResourceTableRow]
     public var resourceVersion: String?
 
     public static let accept = "application/json;as=Table;v=v1;g=meta.k8s.io,application/json"
@@ -14,18 +14,18 @@ public struct ResourceTable: Sendable {
     init(_ json: JSONValue) {
         resourceVersion = json[path: "metadata", "resourceVersion"]?.stringValue
         if json["kind"]?.stringValue == "Table" {
-            columns = (json["columnDefinitions"]?.arrayValue ?? []).map(TableColumn.init)
-            rows = (json["rows"]?.arrayValue ?? []).map(TableRow.init)
+            columns = (json["columnDefinitions"]?.arrayValue ?? []).map(ResourceTableColumn.init)
+            rows = (json["rows"]?.arrayValue ?? []).map(ResourceTableRow.init)
         } else {
             // Some aggregated APIs ignore the Table request and answer with a plain list (or, in a watch event,
             // a plain object). Fall back to name + creation time so the collection still renders.
-            columns = TableColumn.fallback
-            rows = (json["items"]?.arrayValue ?? [json]).map(TableRow.fallback)
+            columns = ResourceTableColumn.fallback
+            rows = (json["items"]?.arrayValue ?? [json]).map(ResourceTableRow.fallback)
         }
     }
 }
 
-public struct TableColumn: Sendable, Hashable {
+public struct ResourceTableColumn: Sendable, Hashable {
     public let name: String
     public let type: String
     public let format: String
@@ -33,11 +33,11 @@ public struct TableColumn: Sendable, Hashable {
     public let priority: Int
 
     static let fallback = [
-        TableColumn(name: "Name", type: "string", format: "name", priority: 0),
-        TableColumn(name: "Age", type: "string", format: "date-time", priority: 0),
+        ResourceTableColumn(name: "Name", type: "string", format: "name", priority: 0),
+        ResourceTableColumn(name: "Age", type: "string", format: "date-time", priority: 0),
     ]
 
-    init(name: String, type: String, format: String, priority: Int) {
+    public init(name: String, type: String, format: String, priority: Int) {
         self.name = name
         self.type = type
         self.format = format
@@ -53,7 +53,7 @@ public struct TableColumn: Sendable, Hashable {
 }
 
 /// One printed row plus the object's metadata (`includeObject=Metadata`).
-public struct TableRow: Sendable, Hashable, Identifiable {
+public struct ResourceTableRow: Sendable, Hashable, Identifiable {
     public let cells: [JSONValue]
     public let object: Unstructured
 
@@ -64,16 +64,16 @@ public struct TableRow: Sendable, Hashable, Identifiable {
         object = Unstructured(Self.slimmed(json["object"] ?? .object([:])))
     }
 
-    /// Row for a full object when the server did not print a table; cells match `TableColumn.fallback`.
-    static func fallback(_ json: JSONValue) -> TableRow {
+    /// Row for a full object when the server did not print a table; cells match `ResourceTableColumn.fallback`.
+    static func fallback(_ json: JSONValue) -> ResourceTableRow {
         let object = Unstructured(json)
-        return TableRow(
+        return ResourceTableRow(
             cells: [.string(object.name), json[path: "metadata", "creationTimestamp"] ?? .null],
             object: Unstructured(slimmed(json))
         )
     }
 
-    init(cells: [JSONValue], object: Unstructured) {
+    public init(cells: [JSONValue], object: Unstructured) {
         self.cells = cells
         self.object = object
     }

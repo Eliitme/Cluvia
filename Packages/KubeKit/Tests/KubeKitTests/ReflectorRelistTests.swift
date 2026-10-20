@@ -157,6 +157,17 @@ struct ReflectorRelistTests {
         #expect(source.watchedFrom.count < 10)
     }
 
+    @MainActor
+    @Test func storeRestartRelistsWithFreshReflector() async throws {
+        let source = ScriptedSource(listings: [["a": "1"], ["a": "2"]], scripts: [[.hang], [.hang]])
+        let store = ResourceStore(source: source, coalesceInterval: .milliseconds(10))
+        defer { store.stop() }
+        _ = try await WatchCacheIntegrationTests.elapsed { store.items == ["1"] }
+        store.restart()
+        _ = try await WatchCacheIntegrationTests.elapsed { store.items == ["2"] && store.phase == .live }
+        #expect(source.listCount == 2)
+    }
+
     @Test func backoffGrowsAndIsCapped() {
         let backoff = ReconnectBackoff.standard
         #expect(backoff.delay(attempt: 0) <= .seconds(1))

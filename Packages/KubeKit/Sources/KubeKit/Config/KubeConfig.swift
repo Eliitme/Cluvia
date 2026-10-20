@@ -140,10 +140,10 @@ public struct ExecEnvVar: Codable, Sendable, Equatable {
 
 public struct NamedContext: Codable, Sendable, Equatable {
     public var name: String
-    public var context: Context
+    public var context: KubeContext
 }
 
-public struct Context: Codable, Sendable, Equatable {
+public struct KubeContext: Codable, Sendable, Equatable {
     public var cluster: String
     public var user: String
     public var namespace: String?

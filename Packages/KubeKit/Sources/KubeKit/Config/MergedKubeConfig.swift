@@ -40,7 +40,7 @@ public enum KubeConfigError: Error, LocalizedError, Sendable, Equatable {
 public struct MergedKubeConfig: Sendable {
     public private(set) var clusters: [String: Cluster] = [:]
     public private(set) var users: [String: AuthInfo] = [:]
-    public private(set) var contexts: [String: Context] = [:]
+    public private(set) var contexts: [String: KubeContext] = [:]
     public private(set) var currentContext: String?
 
     public init(_ configs: [KubeConfig]) {

@@ -5,37 +5,49 @@ import Observation
 @MainActor @Observable
 public final class ResourceStore<Item: Sendable> {
     public private(set) var items: [Item] = []
-    public private(set) var columns: [TableColumn] = []
+    public private(set) var columns: [ResourceTableColumn] = []
     public private(set) var phase = ReflectorPhase.connecting
 
     @ObservationIgnored private var consumer: Task<Void, Never>?
-    @ObservationIgnored private let stopSource: @Sendable () async -> Void
+    @ObservationIgnored private var stopSource: (@Sendable () async -> Void)?
+    @ObservationIgnored private var startSource: (() -> Void)?
 
-    public init<Source: ListWatchSource>(reflector: Reflector<Source>) where Source.Item == Item {
-        stopSource = { await reflector.stop() }
-        consumer = Task { [weak self] in
-            await reflector.start()
-            for await snapshot in reflector.updates {
-                guard let self else { return }
-                self.items = snapshot.items
-                self.columns = snapshot.columns
-                self.phase = snapshot.phase
+    public init<Source: ListWatchSource>(source: Source, coalesceInterval: Duration = .milliseconds(150)) where Source.Item == Item {
+        startSource = { [weak self] in
+            guard let self else { return }
+            let reflector = Reflector(source: source, coalesceInterval: coalesceInterval)
+            stopSource = { await reflector.stop() }
+            consumer = Task { [weak self] in
+                await reflector.start()
+                for await snapshot in reflector.updates {
+                    guard let self else { return }
+                    self.items = snapshot.items
+                    self.columns = snapshot.columns
+                    self.phase = snapshot.phase
+                }
             }
         }
+        startSource?()
+    }
+
+    /// Relists from scratch with a new reflector; current items stay visible until the new list arrives.
+    public func restart() {
+        stop()
+        phase = .connecting
+        startSource?()
     }
 
     public func stop() {
         consumer?.cancel()
         consumer = nil
-        let stopSource = stopSource
-        Task { await stopSource() }
+        if let stopSource { Task { await stopSource() } }
+        stopSource = nil
     }
 
     /// A store dropped without `stop()` must not leave its watch running.
     deinit {
         consumer?.cancel()
-        let stopSource = stopSource
-        Task { await stopSource() }
+        if let stopSource { Task { await stopSource() } }
     }
 }
 
@@ -55,22 +67,21 @@ public final class ResourceStoreRegistry {
     }
 
     private let client: DynamicClient
-    private var entries: [Key: (store: ResourceStore<TableRow>, references: Int)] = [:]
+    private var entries: [Key: (store: ResourceStore<ResourceTableRow>, references: Int)] = [:]
 
     public init(client: DynamicClient) {
         self.client = client
     }
 
     /// Returns the shared table store, starting its watch on first use. Balance with `release`.
-    public func acquire(_ gvr: GroupVersionResource, namespace: String? = nil) -> ResourceStore<TableRow> {
+    public func acquire(_ gvr: GroupVersionResource, namespace: String? = nil) -> ResourceStore<ResourceTableRow> {
         let key = Key(gvr: gvr, namespace: namespace)
         let namespace = key.namespace
         if let entry = entries[key] {
             entries[key]?.references = entry.references + 1
             return entry.store
         }
-        let source = TableListWatchSource(client: client, gvr: gvr, namespace: namespace)
-        let store = ResourceStore(reflector: Reflector(source: source))
+        let store = ResourceStore(source: TableListWatchSource(client: client, gvr: gvr, namespace: namespace))
         entries[key] = (store, 1)
         return store
     }
@@ -84,6 +95,11 @@ public final class ResourceStoreRegistry {
             entry.store.stop()
             entries[key] = nil
         }
+    }
+
+    /// Relists every active collection (user-requested refresh).
+    public func restartAll() {
+        entries.values.forEach { $0.store.restart() }
     }
 
     /// Stops every watch, e.g. when switching away from the cluster.

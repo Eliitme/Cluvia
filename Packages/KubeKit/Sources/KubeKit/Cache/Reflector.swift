@@ -14,7 +14,7 @@ public enum ReflectorPhase: Sendable, Equatable {
 
 public struct ReflectorSnapshot<Item: Sendable>: Sendable {
     public let items: [Item]
-    public let columns: [TableColumn]
+    public let columns: [ResourceTableColumn]
     public let phase: ReflectorPhase
 }
 
@@ -46,7 +46,7 @@ public actor Reflector<Source: ListWatchSource> {
     private let backoff: ReconnectBackoff
 
     private var items: [ObjectKey: Source.Item] = [:]
-    private var columns: [TableColumn] = []
+    private var columns: [ResourceTableColumn] = []
     private var phase = ReflectorPhase.connecting
     private var flushScheduled = false
     private var runTask: Task<Void, Never>?

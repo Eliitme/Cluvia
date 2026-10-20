@@ -14,7 +14,7 @@ let package = Package(
         .target(name: "KubeKit", dependencies: ["Yams"]),
         .testTarget(
             name: "KubeKitTests",
-            dependencies: ["KubeKit"],
+            dependencies: ["KubeKit", "Yams"],
             resources: [.copy("Fixtures")]
         ),
     ]
