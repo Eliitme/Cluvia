@@ -1,0 +1,29 @@
+apiVersion: v1
+kind: Config
+current-context: b-only
+clusters:
+- name: shared
+  cluster:
+    server: https://b.example:6443
+- name: only-b
+  cluster:
+    server: https://only-b.example
+users:
+- name: shared-user
+  user:
+    token: from-b
+contexts:
+- name: shared-ctx
+  context:
+    cluster: shared
+    user: shared-user
+    namespace: team-b
+- name: b-only
+  context:
+    cluster: only-b
+    user: shared-user
+- name: broken
+  context:
+    cluster: missing-cluster
+    user: shared-user
+preferences: {}
