@@ -5,13 +5,18 @@ import SwiftUI
 /// with the same actions as right-click.
 struct ContextRow: View {
     let context: ContextSummary
+    let expanded: Bool
     @Binding var editing: ContextEditing?
     @Binding var failure: String?
+    let onToggle: () -> Void
     @Environment(ClusterCatalogModel.self) private var catalog
     @State private var hovering = false
 
     var body: some View {
         HStack(spacing: 7) {
+            Button(action: onToggle) { Chevron(open: expanded) }
+                .buttonStyle(.plain)
+                .accessibilityLabel(expanded ? "Collapse \(context.name)" : "Expand \(context.name)")
             ClusterBadge(name: context.name)
                 .overlay(alignment: .bottomTrailing) {
                     Circle()

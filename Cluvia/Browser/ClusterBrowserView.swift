@@ -20,6 +20,13 @@ struct ClusterBrowserView: View {
             StatusBarView(session: session)
         }
         .modifier(ActionSheetsModifier(session: session))
+        // Sidebar counts are a cheap one-item list per kind, refreshed while the cluster is on screen.
+        .task(id: session.watchNamespaces) {
+            while !Task.isCancelled {
+                await session.refreshCounts()
+                try? await Task.sleep(for: .seconds(30))
+            }
+        }
     }
 
     @ViewBuilder

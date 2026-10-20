@@ -7,7 +7,8 @@ struct WorkspaceSidebarView: View {
     @Environment(ClusterCatalogModel.self) private var catalog
     @Environment(AppSettingsStore.self) private var settings
     @State private var search = ""
-    @State private var collapsed: Set<String> = []
+    /// Clusters showing their resource kinds; normally just the one in use.
+    @State private var expanded: Set<String> = []
     @State private var editing: ContextEditing?
     @State private var failure: String?
 
@@ -55,6 +56,11 @@ struct WorkspaceSidebarView: View {
             if case let .context(name) = items.first { connect(name) }
         }
         .searchable(text: $search, placement: .sidebar, prompt: "Filter clusters")
+        // Switching to a cluster that is open (selected in the palette, auto-connected, connected from its pane)
+        // shows its kinds and folds the others.
+        .onChange(of: focusKey, initial: true) {
+            if let name = catalog.selectedContext, catalog.sessions[name] != nil { expanded = [name] }
+        }
         .safeAreaInset(edge: .bottom) { bottomBar }
         .modifier(ContextEditingModifier(editing: $editing, failure: $failure))
         .alert("Cannot Update Kubeconfig", isPresented: Binding(get: { failure != nil }, set: { if !$0 { failure = nil } })) {
@@ -65,18 +71,13 @@ struct WorkspaceSidebarView: View {
     }
 
     private func rows(_ contexts: [ContextSummary]) -> some View {
-        ForEach(contexts) { context in
-            DisclosureGroup(isExpanded: expanded(context.name)) {
-                if let session = catalog.sessions[context.name] {
-                    ClusterResourceTree(session: session)
-                }
-            } label: {
-                ContextRow(context: context, editing: $editing, failure: $failure)
+        ForEach(SidebarRow.rows(for: contexts, sessions: catalog.sessions, expanded: expanded)) { row in
+            if case let .context(context, open) = row {
+                ContextRow(context: context, expanded: open, editing: $editing, failure: $failure) { toggle(context.name, open: open) }
+                    .tag(SidebarItem.context(context.name))
+            } else {
+                SidebarChildRow(row: row)
             }
-            .tag(SidebarItem.context(context.name))
-            // Rebuilt when the cluster connects or disconnects: dropping the children and collapsing in the same update
-            // otherwise leaves stale child rows drawn (e.g. a selected "Pods" floating under a disconnected cluster).
-            .id("\(context.name)|\(catalog.sessions[context.name] != nil)")
         }
     }
 
@@ -108,6 +109,10 @@ struct WorkspaceSidebarView: View {
         .overlay(alignment: .top) { Divider() }
     }
 
+    private var focusKey: String {
+        "\(catalog.selectedContext ?? "")|\(catalog.selectedContext.flatMap { catalog.sessions[$0] } != nil)"
+    }
+
     private var selection: Binding<SidebarItem?> {
         Binding {
             guard let name = catalog.selectedContext else { return nil }
@@ -131,18 +136,14 @@ struct WorkspaceSidebarView: View {
         }
     }
 
-    /// Open clusters are expanded unless collapsed by hand; expanding a closed one connects it.
-    private func expanded(_ name: String) -> Binding<Bool> {
-        Binding {
-            catalog.sessions[name] != nil && !collapsed.contains(name)
-        } set: { open in
-            if open { connect(name) } else { collapsed.insert(name) }
-        }
+    /// The chevron opens a cluster (connecting it if needed) or folds it away.
+    private func toggle(_ name: String, open: Bool) {
+        if open { expanded.remove(name) } else { connect(name) }
     }
 
     /// Opens a cluster and folds the others away, so the sidebar shows one cluster's kinds at a time.
     private func connect(_ name: String) {
-        collapsed = Set(catalog.sessions.keys).subtracting([name])
+        expanded = [name]
         catalog.open(name, settings: settings)
     }
 
