@@ -74,6 +74,9 @@ struct WorkspaceSidebarView: View {
                 ContextRow(context: context, editing: $editing, failure: $failure)
             }
             .tag(SidebarItem.context(context.name))
+            // Rebuilt when the cluster connects or disconnects: dropping the children and collapsing in the same update
+            // otherwise leaves stale child rows drawn (e.g. a selected "Pods" floating under a disconnected cluster).
+            .id("\(context.name)|\(catalog.sessions[context.name] != nil)")
         }
     }
 
