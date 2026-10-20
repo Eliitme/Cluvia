@@ -24,6 +24,8 @@ final class TerminalSessionModel: Identifiable {
     @ObservationIgnored private var pendingResize: Task<Void, Never>?
     /// Size last sent to the shell. Each resize makes the shell redraw its prompt, so unchanged sizes are not resent.
     @ObservationIgnored private var sentSize: (columns: Int, rows: Int)?
+    /// A height change held back while the shell sits at its prompt (see `resize`).
+    @ObservationIgnored private var heldSize: (columns: Int, rows: Int)?
     /// Keystrokes go through one ordered queue; separate Tasks per keystroke could reach the session out of order.
     @ObservationIgnored private let input: AsyncStream<Data>.Continuation
     @ObservationIgnored private let inputStream: AsyncStream<Data>
@@ -80,6 +82,7 @@ final class TerminalSessionModel: Identifiable {
             let exit = await session.output { [weak self] data in
                 // Awaiting the main actor per chunk throttles the socket to what the terminal can draw.
                 await self?.terminalView.feed(byteArray: ArraySlice([UInt8](data)))
+                await self?.releaseHeldSizeForFullScreenProgram()
             }
             self.finish(exit)
         }
@@ -99,15 +102,38 @@ final class TerminalSessionModel: Identifiable {
 
     /// Layout reports a stream of sizes while a panel is dragged; only the size it settles on is sent, since each
     /// resize makes shells such as busybox print their prompt again.
+    ///
+    /// A shell at its prompt does not use the height, yet redraws its prompt on every resize. So while the normal
+    /// screen is shown, a change of height alone is held back; full-screen programs (vi, top, less) switch to the
+    /// alternate screen, and the held size is sent then, which they handle by redrawing. Width changes always go out:
+    /// line editing and command output wrap at the width.
     func resize(columns: Int, rows: Int) {
         pendingResize?.cancel()
         pendingResize = Task {
             try? await Task.sleep(for: .milliseconds(500))
-            guard !Task.isCancelled, status == .running, let session else { return }
-            if let sent = sentSize, sent == (columns, rows) { return }
-            sentSize = (columns, rows)
-            await session.resize(columns: columns, rows: rows)
+            guard !Task.isCancelled, status == .running else { return }
+            if let sent = sentSize, sent == (columns, rows) {
+                heldSize = nil
+                return
+            }
+            if let sent = sentSize, sent.columns == columns, !terminalView.getTerminal().isCurrentBufferAlternate {
+                heldSize = (columns, rows)
+                return
+            }
+            await send(columns: columns, rows: rows)
         }
+    }
+
+    private func releaseHeldSizeForFullScreenProgram() async {
+        guard let held = heldSize, terminalView.getTerminal().isCurrentBufferAlternate else { return }
+        await send(columns: held.columns, rows: held.rows)
+    }
+
+    private func send(columns: Int, rows: Int) async {
+        guard let session else { return }
+        heldSize = nil
+        sentSize = (columns, rows)
+        await session.resize(columns: columns, rows: rows)
     }
 
     func stop() {
