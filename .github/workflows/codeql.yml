@@ -1,0 +1,60 @@
+name: CodeQL
+
+# The default setup's autobuild only finds the Swift packages (the Xcode project is generated from project.yml), so
+# it scanned 47 of 160 Swift files and took ~12 minutes. This builds the whole app once, for one architecture,
+# without signing, so every Swift file is analyzed.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths-ignore:
+      - "**/*.md"
+      - ".github/assets/**"
+      - "Brand/**"
+  schedule:
+    - cron: "27 4 * * 1"
+
+concurrency:
+  group: codeql-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: actions
+            build-mode: none
+            runner: ubuntu-latest
+          - language: swift
+            build-mode: manual
+            runner: macos-26
+    steps:
+      - uses: actions/checkout@v7
+      - uses: github/codeql-action/init@v4
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+      - name: Build
+        if: matrix.build-mode == 'manual'
+        run: |
+          brew install xcodegen
+          xcodebuild -downloadComponent MetalToolchain
+          xcodegen generate
+          xcodebuild build -project Cluvia.xcodeproj -scheme Cluvia -configuration Debug \
+            -destination 'platform=macOS,arch=arm64' -skipPackagePluginValidation \
+            ONLY_ACTIVE_ARCH=YES CODE_SIGNING_ALLOWED=NO COMPILER_INDEX_STORE_ENABLE=NO
+      - uses: github/codeql-action/analyze@v4
+        with:
+          category: /language:${{ matrix.language }}
