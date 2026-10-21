@@ -94,9 +94,25 @@ jobs:
           NOTARY_ISSUER: ${{ secrets.NOTARY_API_ISSUER_ID }}
           BUILD_NUMBER: ${{ github.run_number }}
         run: scripts/build-release.sh
+      # The app checks releases/latest/download/appcast.xml for updates; each update must carry an EdDSA signature
+      # from SPARKLE_PRIVATE_KEY. Without the key (or for an unsigned build) no appcast is published.
+      - name: Sparkle appcast
+        env:
+          SPARKLE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+        run: |
+          if [ -z "$SPARKLE_KEY" ] || [ "${UNSIGNED:-0}" = "1" ]; then echo "No Sparkle key or unsigned build: no appcast."; exit 0; fi
+          VERSION=${TAG#v}
+          DMG=build/release/Cluvia-$VERSION.dmg
+          SPARKLE_BIN=build/release/DerivedData/SourcePackages/artifacts/sparkle/Sparkle/bin
+          SIGNATURE=$(printf '%s' "$SPARKLE_KEY" | "$SPARKLE_BIN/sign_update" --ed-key-file - -p "$DMG")
+          BUILD=$(/usr/libexec/PlistBuddy -c "Print CFBundleVersion" build/release/export/Cluvia.app/Contents/Info.plist)
+          scripts/make_appcast.py --version "$VERSION" --build "$BUILD" --dmg "$DMG" --ed-signature "$SIGNATURE" \
+            --url "https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/Cluvia-$VERSION.dmg" > build/release/appcast.xml
+          xmllint --noout build/release/appcast.xml
       - name: Attach to release
         run: |
           gh release upload "$TAG" build/release/Cluvia-*.dmg build/release/Cluvia-*.dmg.sha256 --clobber
+          if [ -f build/release/appcast.xml ]; then gh release upload "$TAG" build/release/appcast.xml --clobber; fi
           case "$TAG" in *-*) gh release edit "$TAG" --prerelease ;; esac
       - name: Clean up signing material
         if: always()

@@ -16,6 +16,9 @@ packages:
   SwiftTerm:
     url: https://github.com/migueldeicaza/SwiftTerm
     minorVersion: 1.20.0
+  Sparkle:
+    url: https://github.com/sparkle-project/Sparkle
+    from: 2.10.0
   KubeKit:
     path: Packages/KubeKit
   HelmKit:
@@ -36,9 +39,12 @@ targets:
         product: STTextView
       - package: SwiftTerm
         product: SwiftTerm
+      - package: Sparkle
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.cluvia.Cluvia
+        # Keys Xcode cannot generate (update feed and signing key), merged into the generated Info.plist.
+        INFOPLIST_FILE: Cluvia/Info.plist
         PRODUCT_NAME: Cluvia
         MARKETING_VERSION: 0.1.1 # x-release-please-version
         CURRENT_PROJECT_VERSION: 1
