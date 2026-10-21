@@ -1,3 +1,4 @@
+import Sparkle
 import SwiftUI
 
 @main
@@ -5,6 +6,13 @@ struct CluviaApp: App {
     @NSApplicationDelegateAdaptor(CluviaAppDelegate.self) private var appDelegate
     @State private var catalog = ClusterCatalogModel()
     @State private var settings = AppSettingsStore()
+    private let updaterController = SPUStandardUpdaterController(startingUpdater: Updates.enabled, updaterDelegate: nil, userDriverDelegate: nil)
+    @StateObject private var updateModel: CheckForUpdatesModel
+
+    init() {
+        let updater = updaterController.updater
+        _updateModel = StateObject(wrappedValue: CheckForUpdatesModel(updater: updater))
+    }
 
     var body: some Scene {
         // One window: clusters in the sidebar, the selected one in the detail area.
@@ -19,6 +27,11 @@ struct CluviaApp: App {
             BrowserCommands()
             ObjectCommands()
             ReleaseNotesCommands()
+            CommandGroup(after: .appInfo) {
+                if Updates.enabled {
+                    CheckForUpdatesCommand(updater: updaterController.updater, model: updateModel)
+                }
+            }
         }
 
         Window("Release Notes", id: "release-notes") {

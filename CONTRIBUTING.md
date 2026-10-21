@@ -111,7 +111,8 @@ How a release happens ([`.github/workflows/release.yml`](.github/workflows/relea
 2. Merging it tags `vX.Y.Z` and creates the GitHub Release.
 3. The build job archives the app, signs it with Developer ID, notarizes and staples it, and attaches
    `Cluvia-X.Y.Z.dmg` and its `.sha256` to the release.
-4. The homebrew job updates the version and checksum in the
+4. The DMG is signed for Sparkle and an `appcast.xml` is attached, so installed apps offer the update.
+5. The homebrew job updates the version and checksum in the
    [Homebrew cask](https://github.com/Eliitme/homebrew-tap/blob/main/Casks/cluvia.rb).
 
 `CHANGELOG.md` is bundled into the app: it shows "What's New" once after an update and lists every release under
@@ -131,9 +132,27 @@ notarized.
 | `NOTARY_API_KEY_P8` | Contents of an App Store Connect API key (`AuthKey_XXXX.p8`, Developer role) |
 | `NOTARY_API_KEY_ID` | That key's ID |
 | `NOTARY_API_ISSUER_ID` | Issuer ID shown on the App Store Connect API keys page |
+| `SPARKLE_PRIVATE_KEY` | EdDSA private key that signs in-app updates (see below). Without it, releases publish no appcast and installed apps are not offered the update |
 | `HOMEBREW_TAP_TOKEN` | Fine-grained token with **Contents: Read and write** on `Eliitme/homebrew-tap`, used to point the cask at each new release (optional) |
 
 To rebuild the assets of an existing release, run the Release workflow manually with its tag.
+
+### In-app updates (Sparkle)
+
+The app checks `releases/latest/download/appcast.xml`; the release workflow signs each DMG with the EdDSA key and
+publishes that appcast (written by `scripts/make_appcast.py`, with the version's CHANGELOG section as release notes).
+The public key is `SUPublicEDKey` in `Cluvia/Info.plist`; Debug builds never check for updates.
+
+To create the key pair once (Sparkle's tools are in the resolved package):
+
+```sh
+SPARKLE_BIN=$(ls -d ~/Library/Developer/Xcode/DerivedData/Cluvia-*/SourcePackages/artifacts/sparkle/Sparkle/bin | head -1)
+"$SPARKLE_BIN/generate_keys"                         # stores the private key in the login keychain, prints the public key
+"$SPARKLE_BIN/generate_keys" -x /tmp/sparkle.key       # export it for CI
+gh secret set SPARKLE_PRIVATE_KEY -R Eliitme/Cluvia < /tmp/sparkle.key && rm -P /tmp/sparkle.key
+```
+
+Keep the private key backed up: losing it means installed apps can no longer accept updates.
 
 ### Building a release locally
 
