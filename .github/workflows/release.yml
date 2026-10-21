@@ -103,3 +103,31 @@ jobs:
         run: |
           security delete-keychain "$RUNNER_TEMP/signing.keychain-db" 2>/dev/null || true
           rm -f "$RUNNER_TEMP/notary.p8"
+
+  # Points the Homebrew cask (github.com/Eliitme/homebrew-tap) at the new release. Needs HOMEBREW_TAP_TOKEN, a
+  # fine-grained token with Contents write access to that repository; skipped without it and for pre-releases.
+  homebrew:
+    needs: [release-please, build]
+    if: always() && needs.build.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      TAG: ${{ needs.release-please.outputs.tag_name || inputs.tag }}
+      TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Update cask
+        run: |
+          if [ -z "$TAP_TOKEN" ]; then echo "HOMEBREW_TAP_TOKEN is not set; cask left unchanged."; exit 0; fi
+          case "$TAG" in *-*) echo "Pre-release $TAG; cask left unchanged."; exit 0 ;; esac
+          VERSION=${TAG#v}
+          SHA=$(gh release download "$TAG" -R "$GITHUB_REPOSITORY" -p "Cluvia-$VERSION.dmg.sha256" -O - | cut -d' ' -f1)
+          [ ${#SHA} -eq 64 ] || { echo "No checksum for $TAG"; exit 1; }
+          git clone --depth 1 "https://x-access-token:${TAP_TOKEN}@github.com/Eliitme/homebrew-tap.git" tap
+          cd tap
+          sed -i -E "s/^  version \".*\"/  version \"$VERSION\"/; s/^  sha256 \".*\"/  sha256 \"$SHA\"/" Casks/cluvia.rb
+          if git diff --quiet; then echo "Cask already at $VERSION."; exit 0; fi
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -qam "cluvia $VERSION"
+          git push -q

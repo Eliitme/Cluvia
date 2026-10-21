@@ -111,6 +111,8 @@ How a release happens ([`.github/workflows/release.yml`](.github/workflows/relea
 2. Merging it tags `vX.Y.Z` and creates the GitHub Release.
 3. The build job archives the app, signs it with Developer ID, notarizes and staples it, and attaches
    `Cluvia-X.Y.Z.dmg` and its `.sha256` to the release.
+4. The homebrew job updates the version and checksum in the
+   [Homebrew cask](https://github.com/Eliitme/homebrew-tap/blob/main/Casks/cluvia.rb).
 
 `CHANGELOG.md` is bundled into the app: it shows "What's New" once after an update and lists every release under
 **Help › Release Notes**.
@@ -129,6 +131,7 @@ notarized.
 | `NOTARY_API_KEY_P8` | Contents of an App Store Connect API key (`AuthKey_XXXX.p8`, Developer role) |
 | `NOTARY_API_KEY_ID` | That key's ID |
 | `NOTARY_API_ISSUER_ID` | Issuer ID shown on the App Store Connect API keys page |
+| `HOMEBREW_TAP_TOKEN` | Fine-grained token with **Contents: Read and write** on `Eliitme/homebrew-tap`, used to point the cask at each new release (optional) |
 
 To rebuild the assets of an existing release, run the Release workflow manually with its tag.
 
