@@ -57,8 +57,14 @@ certificates, tokens and credential plugins (`aws`, `gke-gcloud-auth-plugin`, `k
 
 ## Install
 
-Download the latest DMG from [Releases](https://github.com/Eliitme/Cluvia/releases) and drag Cluvia to
-Applications. Requires macOS 14 or later.
+With [Homebrew](https://brew.sh):
+
+```sh
+brew install --cask eliitme/tap/cluvia
+```
+
+Or download the latest DMG from [Releases](https://github.com/Eliitme/Cluvia/releases) and drag Cluvia to
+Applications. Requires macOS 14 or later. Releases are signed with a Developer ID and notarized by Apple.
 
 - Cluvia reads your kubeconfig (`~/.kube/config` or the `KUBECONFIG` list, as `kubectl` does).
 - Credential plugins (cloud CLIs, OIDC helpers) run from your login shell's `PATH`.
