@@ -6,11 +6,8 @@ name: CodeQL
 on:
   push:
     branches: [main]
+  # Every PR is scanned, docs-only ones included: main requires CodeQL results before a merge.
   pull_request:
-    paths-ignore:
-      - "**/*.md"
-      - ".github/assets/**"
-      - "Brand/**"
   schedule:
     - cron: "27 4 * * 1"
 
