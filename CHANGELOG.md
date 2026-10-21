@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.1](https://github.com/Eliitme/Cluvia/compare/v0.1.0...v0.1.1) (2026-10-21)
+
+
+### Bug Fixes
+
+* report a timed-out process as a timeout, not as its exit status ([0387aab](https://github.com/Eliitme/Cluvia/commit/0387aab8722e18e59ab03071807faaf54f783ff2))
+
 ## 0.1.0 (2026-10-20)
 
 
