@@ -6,7 +6,6 @@
 ### Features
 
 * update the app in place with Sparkle ([f34c291](https://github.com/Eliitme/Cluvia/commit/f34c291d873245ec8cb19f1b12c4412fdef0885b))
-* update the app in place with Sparkle ([8602f0a](https://github.com/Eliitme/Cluvia/commit/8602f0a1a537e1c10a28a24d1869fcc1b0d4e754))
 
 ## [0.1.1](https://github.com/Eliitme/Cluvia/compare/v0.1.0...v0.1.1) (2026-10-21)
 
