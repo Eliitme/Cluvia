@@ -60,7 +60,38 @@ struct ResourceActionTests {
         let deployment = Unstructured(.object(["spec": .object(["selector": .object(["matchLabels": .object(["app": .string("web")])])])]))
         #expect(ResourceActions.podSelector(of: deployment) == "app=web")
         #expect(ResourceAction.available(for: Self.kind("Node", namespaced: false)) == [.edit, .cordon, .uncordon, .drain, .nodeShell, .delete])
-        #expect(ResourceAction.allCases.filter(\.needsConfirmation) == [.restart, .cordon, .uncordon, .nodeShell, .delete])
+        #expect(ResourceAction.allCases.filter { $0.route == .confirm } == [.restart, .cordon, .uncordon, .nodeShell])
+        #expect(ResourceAction.allCases.filter { $0.route == .sheet } == [.portForward, .scale, .drain, .delete])
+    }
+
+    @Test func conflictAfterDeleteIsResolvedFromAFreshRead() {
+        func object(uid: String, finalizers: [String]) -> Unstructured {
+            Unstructured(.object(["metadata": .object(["uid": .string(uid), "finalizers": .array(finalizers.map(JSONValue.string))])]))
+        }
+        let outcome = ClusterSession.conflictOutcome
+        #expect(outcome(nil, "u1", true, true) == .gone)
+        #expect(outcome(object(uid: "u2", finalizers: []), "u1", true, true) == .replaced)
+        #expect(outcome(object(uid: "u1", finalizers: []), "u1", true, true) == .finalizersAlreadyRemoved)
+        // A conflict on the delete itself never counts as done, even with no finalizers left.
+        #expect(outcome(object(uid: "u1", finalizers: []), "u1", true, false) == .unresolved)
+        #expect(outcome(object(uid: "u1", finalizers: ["x"]), "u1", true, true) == .unresolved)
+        #expect(outcome(object(uid: "u2", finalizers: []), nil, false, false) == .unresolved)
+    }
+
+    @Test func forceIsOfferedOnlyForPodsAndTerminatingObjects() {
+        let configMap = ResourceKind(gvr: GroupVersionResource(group: "", version: "v1", resource: "configmaps"),
+                                     kind: "ConfigMap", title: "ConfigMaps", namespaced: true, category: .config)
+        let healthy = Unstructured(.object(["metadata": .object(["name": .string("a")])]))
+        let terminating = Unstructured(.object(["metadata": .object([
+            "name": .string("a"), "deletionTimestamp": .string("2026-10-21T00:00:00Z"),
+            "finalizers": .array([.string("kubernetes.io/pvc-protection"), .string("example.com/cleanup")]),
+        ])]))
+        #expect(!ForceDelete.isOffered(kind: configMap, object: healthy))
+        #expect(ForceDelete.isOffered(kind: configMap, object: terminating))
+        #expect(ForceDelete.isOffered(kind: Self.kind("Pod"), object: healthy))
+        #expect(ClusterSession.finalizers(of: terminating) == ["kubernetes.io/pvc-protection", "example.com/cleanup"])
+        #expect(ForceDelete.consequence(of: "kubernetes.io/pvc-protection").severe)
+        #expect(!ForceDelete.consequence(of: "example.com/cleanup").severe)
     }
 
     @Test func templatesParseAsManifests() throws {

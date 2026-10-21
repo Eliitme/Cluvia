@@ -6,9 +6,8 @@ struct ConfirmActionSheet: View {
     let pending: PendingAction
     let contextName: String
     /// Returns an error message, or nil on success.
-    let perform: (DynamicClient.PropagationPolicy) async -> String?
+    let perform: () async -> String?
     @Environment(\.dismiss) private var dismiss
-    @State private var propagation = DynamicClient.PropagationPolicy.background
     @State private var busy = false
     @State private var error: String?
 
@@ -18,29 +17,20 @@ struct ConfirmActionSheet: View {
                 .font(.title3.weight(.semibold))
             TargetSummary(kind: pending.kind, key: pending.key, contextName: contextName)
             Text(explanation).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-            if pending.action == .delete {
-                Picker("Dependents", selection: $propagation) {
-                    Text("Delete in background").tag(DynamicClient.PropagationPolicy.background)
-                    Text("Delete before owner (foreground)").tag(DynamicClient.PropagationPolicy.foreground)
-                    Text("Keep (orphan)").tag(DynamicClient.PropagationPolicy.orphan)
-                }
-            }
             if let error { Label(error, systemImage: "xmark.octagon").foregroundStyle(.red).textSelection(.enabled) }
             HStack {
                 Spacer()
                 Button("Cancel", role: .cancel) { dismiss() }.keyboardShortcut(.cancelAction)
-                Button(pending.action.title.replacingOccurrences(of: "…", with: ""), role: pending.action == .delete ? .destructive : nil) {
+                Button(pending.action.title.replacingOccurrences(of: "…", with: "")) {
                     busy = true
                     Task {
-                        error = await perform(propagation)
+                        error = await perform()
                         busy = false
                         if error == nil { dismiss() }
                     }
                 }
                 .disabled(busy)
-                // Destructive confirmations read as such: macOS draws a destructive role like any other button.
                 .buttonStyle(.borderedProminent)
-                .tint(pending.action == .delete ? .red : .accentColor)
             }
         }
         .padding(20)
@@ -55,7 +45,6 @@ struct ConfirmActionSheet: View {
 
     private var explanation: String {
         switch pending.action {
-        case .delete: "This cannot be undone."
         case .restart: "Pods are replaced according to the rollout strategy."
         case .cordon: "New pods will not be scheduled on this node. Running pods are not evicted."
         case .uncordon: "The node will accept new pods again."

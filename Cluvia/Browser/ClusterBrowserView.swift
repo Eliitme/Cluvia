@@ -63,16 +63,22 @@ struct ActionSheetsModifier: ViewModifier {
     func body(content: Content) -> some View {
         content
             .sheet(item: $session.pendingAction) { pending in
-                if pending.action == .scale {
+                switch pending.action {
+                case .scale:
                     ScaleSheetLoader(session: session, pending: pending)
-                } else if pending.action == .portForward {
+                case .portForward:
                     ForwardPortSheetLoader(session: session, pending: pending)
-                } else if pending.action == .drain {
+                case .drain:
                     DrainSheet(pending: pending, contextName: session.contextName, client: session.client)
-                } else {
-                    ConfirmActionSheet(pending: pending, contextName: session.contextName) { policy in
-                        await session.perform(pending, propagation: policy)
+                case .delete:
+                    DeleteSheet(session: session, pending: pending)
+                case .restart, .cordon, .uncordon, .nodeShell:
+                    ConfirmActionSheet(pending: pending, contextName: session.contextName) {
+                        await session.perform(pending)
                     }
+                case .logs, .shell, .edit:
+                    // Run straight from `request`; never pending.
+                    EmptyView()
                 }
             }
             .sheet(item: $session.editModel) { model in

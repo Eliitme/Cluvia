@@ -47,9 +47,6 @@ enum ResourceAction: String, CaseIterable, Identifiable {
         }
     }
 
-    /// Actions that disrupt workloads go through a confirmation that names the cluster context.
-    var needsConfirmation: Bool { [.restart, .cordon, .uncordon, .nodeShell, .delete].contains(self) }
-
     static func available(for kind: ResourceKind) -> [ResourceAction] {
         // Group checks keep a CRD that happens to be called "Deployment" from getting built-in actions.
         let core = kind.gvr.group.isEmpty, apps = kind.gvr.group == "apps"
