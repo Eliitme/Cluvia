@@ -126,4 +126,39 @@ struct LogsAndApplyIntegrationTests {
         #expect(!String(decoding: try stored.data(), as: UTF8.self).contains("b2xkLXZhbHVl"))
         try await client.delete(secrets, name: name, namespace: Self.namespace)
     }
+
+    /// A time window returns only recent lines, and is applied together with the line limit.
+    @Test func sinceSecondsLimitsLinesToTheWindow() async throws {
+        let client = try WatchCacheIntegrationTests.client()
+        try await WatchCacheIntegrationTests.ensureNamespace(client)
+        let name = "cluvia-it-since"
+        try? await client.delete(.pods, name: name, namespace: Self.namespace, propagationPolicy: nil, gracePeriodSeconds: 0)
+        while (try? await client.get(.pods, name: name, namespace: Self.namespace)) != nil { try await Task.sleep(for: .milliseconds(300)) }
+        // Ten lines at once, then nothing more: a window opened after a pause sees none of them.
+        let pod = """
+        {"apiVersion":"v1","kind":"Pod","metadata":{"name":"\(name)"},"spec":{"terminationGracePeriodSeconds":0,
+         "containers":[{"name":"main","image":"busybox:1.36","command":["sh","-c","for i in 1 2 3 4 5 6 7 8 9 10; do echo line $i; done; sleep 3600"]}]}}
+        """
+        _ = try await client.create(.pods, namespace: Self.namespace, object: Unstructured(data: Data(pod.utf8)))
+        func lines(_ options: LogOptions) async throws -> Int {
+            var count = 0
+            for try await event in LogStreamer(client: client).stream(pod: name, namespace: Self.namespace, options: options) {
+                if case .line = event { count += 1 }
+            }
+            return count
+        }
+        var all = 0
+        let deadline = Date().addingTimeInterval(60)
+        while all < 10, Date() < deadline {
+            try await Task.sleep(for: .seconds(1))
+            all = (try? await lines(LogOptions(tailLines: nil, follow: false))) ?? 0
+        }
+        try await Task.sleep(for: .seconds(3))
+        let windowed = try await lines(LogOptions(tailLines: nil, follow: false, sinceSeconds: 1))
+        let limited = try await lines(LogOptions(tailLines: 3, follow: false))
+        try? await client.delete(.pods, name: name, namespace: Self.namespace, propagationPolicy: nil, gracePeriodSeconds: 0)
+        #expect(all == 10)
+        #expect(windowed == 0)
+        #expect(limited == 3)
+    }
 }

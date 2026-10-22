@@ -5,12 +5,15 @@ public struct LogOptions: Sendable, Hashable {
     public var previous = false
     public var tailLines: Int? = 1000
     public var follow = true
+    /// Only lines newer than this many seconds; combined with `tailLines` when both are set (the server applies both).
+    public var sinceSeconds: Int?
 
-    public init(container: String? = nil, previous: Bool = false, tailLines: Int? = 1000, follow: Bool = true) {
+    public init(container: String? = nil, previous: Bool = false, tailLines: Int? = 1000, follow: Bool = true, sinceSeconds: Int? = nil) {
         self.container = container
         self.previous = previous
         self.tailLines = tailLines
         self.follow = follow
+        self.sinceSeconds = sinceSeconds
     }
 }
 
@@ -127,9 +130,11 @@ public struct LogStreamer: Sendable {
         if options.follow, !options.previous { items.append(URLQueryItem(name: "follow", value: "true")) }
         if options.previous { items.append(URLQueryItem(name: "previous", value: "true")) }
         if let sinceTime {
+            // Resuming after a reconnect: the last line seen bounds the window, not the original options.
             items.append(URLQueryItem(name: "sinceTime", value: sinceTime))
-        } else if let tail = options.tailLines {
-            items.append(URLQueryItem(name: "tailLines", value: String(tail)))
+        } else {
+            if let since = options.sinceSeconds { items.append(URLQueryItem(name: "sinceSeconds", value: String(since))) }
+            if let tail = options.tailLines { items.append(URLQueryItem(name: "tailLines", value: String(tail))) }
         }
         return items
     }

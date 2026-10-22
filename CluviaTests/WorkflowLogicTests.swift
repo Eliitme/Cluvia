@@ -29,8 +29,8 @@ struct LineDiffTests {
 }
 
 struct LogBufferTests {
-    static func lines(_ range: Range<Int>) -> [LogLine] {
-        range.map { LogLine(timestamp: nil, text: "line \($0)") }
+    static func lines(_ range: Range<Int>) -> [LogEntry] {
+        range.map { LogEntry(LogLine(timestamp: nil, text: "line \($0)")) }
     }
 
     @Test func dropsOldestInChunksWithStableNumbers() {
@@ -38,11 +38,11 @@ struct LogBufferTests {
         buffer.append(Self.lines(0..<100))
         #expect(buffer.dropped == 0)
         buffer.append(Self.lines(100..<101))
-        #expect(buffer.lines.count == 90)
+        #expect(buffer.entries.count == 90)
         #expect(buffer.dropped == 11)
         #expect(buffer.endIndex == 101)
-        #expect(buffer.lines(from: 5) == nil)
-        #expect(buffer.lines(from: 100)?.first?.text == "line 100")
+        #expect(buffer.entries(from: 5) == nil)
+        #expect(buffer.entries(from: 100)?.first?.line.text == "line 100")
     }
 }
 

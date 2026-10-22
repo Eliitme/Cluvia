@@ -5,30 +5,19 @@ import Testing
 
 @MainActor
 @Suite struct StatusAndLogColoringTests {
-    func colored(_ text: String) -> [NSColor?] {
-        let storage = NSTextStorage(string: text)
-        LogLevelColoring.apply(to: storage, text: text, from: 0)
-        var colors: [NSColor?] = []
-        (text as NSString).enumerateSubstrings(in: NSRange(location: 0, length: storage.length), options: .byLines) { _, range, _, _ in
-            colors.append(storage.attribute(.foregroundColor, at: range.location, effectiveRange: nil) as? NSColor)
-        }
-        return colors
-    }
-
-    @Test func logLinesAreColoredBySeverityOnly() {
+    @Test func logLinesAreClassifiedBySeverityOnly() {
         let lines = [
             "13:40 level=error request failed",
             #"{"level":"WARN","msg":"slow"}"#,
             "E1020 12:00:00.000 1 controller.go:1] sync failed",
-            "pod-a │ W1020 12:00:00.000 1 x.go:1] retrying",
+            "W1020 12:00:00.000 1 x.go:1] retrying",
             "level=info msg=\"done\" error=null",
             "completed without error",
             "[warn] disk almost full",
             "ERROR: cannot connect",
+            #"{"level" : "error", "msg": "spaced"}"#,
         ]
-        #expect(colored(lines.joined(separator: "\n")) == [
-            .systemRed, .systemOrange, .systemRed, .systemOrange, nil, nil, .systemOrange, .systemRed,
-        ])
+        #expect(lines.map(LogLevel.classify) == [.error, .warning, .error, .warning, .other, .other, .warning, .error, .error])
     }
 
     @Test func runningPodThatIsNotReadyIsNotGreen() throws {
