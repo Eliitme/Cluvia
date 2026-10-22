@@ -46,7 +46,7 @@ targets:
         # Keys Xcode cannot generate (update feed and signing key), merged into the generated Info.plist.
         INFOPLIST_FILE: Cluvia/Info.plist
         PRODUCT_NAME: Cluvia
-        MARKETING_VERSION: 0.2.0 # x-release-please-version
+        MARKETING_VERSION: 0.3.0 # x-release-please-version
         CURRENT_PROJECT_VERSION: 1
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_CFBundleDisplayName: Cluvia
