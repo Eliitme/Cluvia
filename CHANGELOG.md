@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0](https://github.com/Eliitme/Cluvia/compare/v0.2.0...v0.3.0) (2026-10-22)
+
+
+### Features
+
+* daily workflow gaps: force delete, secrets, navigation, sign-in errors, logs, rollouts ([#16](https://github.com/Eliitme/Cluvia/issues/16)) ([f0a2033](https://github.com/Eliitme/Cluvia/commit/f0a20330092a63ac0853368adf1e4c765dcadc79))
+
 ## [0.2.0](https://github.com/Eliitme/Cluvia/compare/v0.1.1...v0.2.0) (2026-10-21)
 
 
