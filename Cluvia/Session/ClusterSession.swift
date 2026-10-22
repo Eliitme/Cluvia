@@ -21,21 +21,39 @@ final class ClusterSession {
     private(set) var metricsAvailable = false
     var selectedKind: ResourceKind? {
         didSet {
+            let changed = selectedKind != oldValue
+            // Leaving Helm for the kind already selected records that kind with its selection; a new kind starts
+            // with none. `isSwitchingKind` keeps the clearing below from overwriting the entry being left.
+            if !isRestoringHistory, let selectedKind, changed || showingHelm {
+                history.visit(.kind(selectedKind, changed ? nil : selectedObject))
+            }
+            isSwitchingKind = true
             showingHelm = false
-            if selectedKind != oldValue { selectedObject = nil }
+            if changed { selectedObject = nil }
+            isSwitchingKind = false
             // Keep the selected kind visible in the sidebar, e.g. after picking it from the palette.
             if let category = selectedKind?.category { expandedCategories.insert(category) }
         }
     }
     /// The Helm releases page is shown instead of a resource table.
-    var showingHelm = false
+    var showingHelm = false {
+        didSet { if showingHelm, !oldValue, !isRestoringHistory { history.visit(.helm) } }
+    }
+    /// Back/Forward history of this window; changed only by the didSets here and `ClusterSession+Navigation`.
+    var history = NavigationHistory()
+    @ObservationIgnored var isRestoringHistory = false
+    @ObservationIgnored private var isSwitchingKind = false
     /// Resource groups opened in the sidebar.
     /// Starts with only the selected kind's group open (see `selectedKind`).
     var expandedCategories: Set<ResourceCategory> = []
     let helm: HelmReleasesModel
     let prometheus: PrometheusModel
     @ObservationIgnored let searchIndex = GlobalSearchIndex()
-    var selectedObject: ObjectKey?
+    var selectedObject: ObjectKey? {
+        didSet {
+            if selectedObject != oldValue, !isSwitchingKind, !isRestoringHistory { history.updateCurrent(key: selectedObject) }
+        }
+    }
     /// The detail panel next to the resource table.
     var showInspector = false
     /// The selected object is on screen (in the current table, not filtered out); object commands act only then.
@@ -147,12 +165,6 @@ final class ClusterSession {
     /// Keeps the sidebar count of the kind on screen in step with its live table, between periodic recounts.
     func updateCount(_ gvr: GroupVersionResource, _ count: Int) {
         if counts[gvr] != count { counts[gvr] = count }
-    }
-
-    /// Jumps to another object, e.g. from an owner reference.
-    func reveal(_ kind: ResourceKind, _ key: ObjectKey) {
-        selectedKind = kind
-        selectedObject = key
     }
 
     /// Kind serving `ownerKind` (e.g. ReplicaSet) for navigation from owner references.

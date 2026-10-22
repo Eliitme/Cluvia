@@ -26,6 +26,7 @@ struct CluviaApp: App {
         .commands {
             BrowserCommands()
             ObjectCommands()
+            NavigationCommands()
             ReleaseNotesCommands()
             CommandGroup(after: .appInfo) {
                 if Updates.enabled {
