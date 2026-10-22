@@ -125,26 +125,3 @@ struct ServiceSection: View {
         }
     }
 }
-
-struct DataSection: View {
-    let json: JSONValue
-    let secret: Bool
-    @Binding var reveal: Bool
-
-    var body: some View {
-        let entries = (json["data"]?.objectValue ?? [:]).sorted { $0.key < $1.key }
-        DetailSection("Data (\(entries.count))") {
-            if secret {
-                GridRow { Toggle("Reveal values", isOn: $reveal).gridCellColumns(2) }
-            }
-            ForEach(entries, id: \.key) { entry in
-                DetailRow(entry.key) {
-                    Text(secret ? (reveal ? SecretMasking.decoded(entry.value) : SecretMasking.placeholder) : entry.value.displayText)
-                        .font(.system(.callout, design: .monospaced))
-                        .textSelection(.enabled)
-                        .lineLimit(8)
-                }
-            }
-        }
-    }
-}

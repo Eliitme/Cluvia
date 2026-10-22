@@ -37,6 +37,10 @@ struct YamlEditSheet: View {
                 outcomeView.frame(minHeight: 60, idealHeight: 120)
             }
             Divider()
+            if let state = model.secretState, !model.concealed {
+                SecretEditFooter(state: state, removeLastApplied: $model.removeLastApplied)
+                Divider()
+            }
             HStack {
                 Button("Cancel", role: .cancel) { dismiss() }.keyboardShortcut(.cancelAction)
                 Spacer()
@@ -85,6 +89,31 @@ struct YamlEditSheet: View {
             }
             .padding()
         }
+    }
+}
+
+/// How Secret values are edited, which keys stay base64, and the offer to drop the annotation holding old values.
+private struct SecretEditFooter: View {
+    let state: SecretEditState
+    @Binding var removeLastApplied: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Values under data are shown decoded and saved as base64. Unchanged values are sent exactly as stored.")
+                .foregroundStyle(.secondary)
+            if !state.base64Keys.isEmpty {
+                Text("Kept as base64 (binary or not plain text): \(state.base64Keys.sorted().joined(separator: ", "))")
+                    .foregroundStyle(.secondary)
+            }
+            if state.hadLastApplied {
+                Toggle("Remove last-applied-configuration (it contains the previous values)", isOn: $removeLastApplied)
+                    .foregroundStyle(.orange)
+            }
+        }
+        .font(.callout)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
     }
 }
 

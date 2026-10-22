@@ -22,13 +22,20 @@ final class YamlEditModel: Identifiable {
     var text: String { didSet { if text != oldValue { outcome = .none } } }
     /// Secret values stay hidden until the user explicitly reveals them for editing.
     var concealed: Bool
+    /// Set when editing a Secret whose values are shown decoded.
+    let secretState: SecretEditState?
+    /// Remove client-side apply's annotation after applying, so it no longer holds the previous values.
+    var removeLastApplied: Bool
     private(set) var outcome = Outcome.none
     private(set) var busy = false
     @ObservationIgnored private let applier: ResourceApplier
 
-    init(title: String, yaml: String, defaultNamespace: String?, applier: ResourceApplier, concealed: Bool = false) {
+    init(title: String, yaml: String, defaultNamespace: String?, applier: ResourceApplier, concealed: Bool = false,
+         secretState: SecretEditState? = nil) {
         self.title = title
         self.concealed = concealed
+        self.secretState = secretState
+        removeLastApplied = secretState?.hadLastApplied ?? false
         original = yaml
         text = yaml
         self.defaultNamespace = defaultNamespace
@@ -55,15 +62,31 @@ final class YamlEditModel: Identifiable {
         busy = true
         defer { busy = false }
         do {
-            switch try await applier.apply(yaml: text, defaultNamespace: defaultNamespace, dryRun: dryRun, force: force) {
+            var yaml = text
+            var editsSecret = false
+            // Only a manifest that is still a v1 Secret gets its decoded values re-encoded.
+            if let secretState {
+                let manifest = try ResourceApplier.manifest(fromYAML: text)
+                if SecretDataCodec.isSecret(manifest) {
+                    yaml = try YAMLRenderer.yaml(SecretDataCodec.encode(manifest, state: secretState))
+                    editsSecret = true
+                }
+            }
+            switch try await applier.apply(yaml: yaml, defaultNamespace: defaultNamespace, dryRun: dryRun, force: force) {
             case let .applied(object):
                 if dryRun {
-                    // Compare without server bookkeeping that always changes.
-                    let result = try YAMLRenderer.yaml(ResourceApplier.prepared(object.json))
+                    // Compare without server bookkeeping that always changes, and with Secret values shown as edited.
+                    let shown = editsSecret ? secretState.map { SecretDataCodec.displayed(object.json, state: $0) } ?? object.json : object.json
+                    let result = try YAMLRenderer.yaml(ResourceApplier.prepared(shown))
                     let before = (try? YAMLRenderer.yaml(ResourceApplier.prepared(ResourceApplier.manifest(fromYAML: original)))) ?? ""
                     outcome = .preview(LineDiff.hunks(LineDiff.lines(from: before, to: result)))
+                    return false
                 }
-                return !dryRun
+                if editsSecret, removeLastApplied, SecretDataCodec.isSecret(object.json), let failure = await dropLastApplied(from: object) {
+                    outcome = .failed("Applied, but the last-applied-configuration annotation was not removed: \(failure)")
+                    return false
+                }
+                return true
             case let .conflicts(causes):
                 outcome = .conflicts(causes)
             }
@@ -71,6 +94,20 @@ final class YamlEditModel: Identifiable {
             outcome = .failed(error.localizedDescription)
         }
         return false
+    }
+
+    /// Returns an error message, or nil when the annotation is gone (including when it was already absent).
+    private func dropLastApplied(from object: Unstructured) async -> String? {
+        let secrets = GroupVersionResource(group: "", version: "v1", resource: "secrets")
+        do {
+            _ = try await applier.client.patch(secrets, name: object.name, namespace: object.namespace, type: .json,
+                                               body: SecretDataCodec.lastAppliedRemovalPatch)
+            return nil
+        } catch let error as KubeAPIError where error.statusCode == 422 {
+            return nil
+        } catch {
+            return error.localizedDescription
+        }
     }
 
     nonisolated static let kindsWithoutSpec: Set<String> = [

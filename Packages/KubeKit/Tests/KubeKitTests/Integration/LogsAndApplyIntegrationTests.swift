@@ -81,4 +81,49 @@ struct LogsAndApplyIntegrationTests {
         let persisted = try await client.get(Self.deployments, name: name, namespace: Self.namespace)
         #expect(persisted.json[path: "spec", "replicas"]?.intValue == target)
     }
+
+    /// Rotating a Secret created by client-side apply: the old value lives on in last-applied-configuration until
+    /// that annotation is removed explicitly, because server-side apply does not drop a field another manager owns.
+    @Test func rotatedSecretKeepsNoCopyOfTheOldValue() async throws {
+        let client = try WatchCacheIntegrationTests.client()
+        try await WatchCacheIntegrationTests.ensureNamespace(client)
+        let secrets = GroupVersionResource(group: "", version: "v1", resource: "secrets")
+        let name = "cluvia-it-rotate"
+        try? await client.delete(secrets, name: name, namespace: Self.namespace, propagationPolicy: nil)
+        while (try? await client.get(secrets, name: name, namespace: Self.namespace)) != nil {
+            try await Task.sleep(for: .milliseconds(200))
+        }
+        let lastApplied = #"{"apiVersion":"v1","kind":"Secret","metadata":{"name":"\#(name)"},"data":{"password":"b2xkLXZhbHVl"}}"#
+        let created: [String: Any] = [
+            "apiVersion": "v1", "kind": "Secret",
+            "metadata": ["name": name, "annotations": ["kubectl.kubernetes.io/last-applied-configuration": lastApplied]],
+            "data": ["password": "b2xkLXZhbHVl"],
+        ]
+        _ = try await client.transport.data(KubeRequest(
+            method: "POST", path: secrets.path(namespace: Self.namespace),
+            query: [URLQueryItem(name: "fieldManager", value: "kubectl-client-side-apply")],
+            body: try JSONSerialization.data(withJSONObject: created), contentType: "application/json"
+        ))
+
+        let applier = ResourceApplier(client: client, catalog: try await APIDiscovery(transport: client.transport).catalog())
+        let rotated = """
+        apiVersion: v1
+        kind: Secret
+        metadata:
+          name: \(name)
+          namespace: \(Self.namespace)
+        data:
+          password: bmV3LXZhbHVl
+        """
+        _ = try await applier.apply(yaml: rotated, defaultNamespace: nil, dryRun: false, force: true)
+        let annotationPath = "/metadata/annotations/kubectl.kubernetes.io~1last-applied-configuration"
+        _ = try await client.patch(secrets, name: name, namespace: Self.namespace, type: .json,
+                                   body: Data(#"[{"op":"remove","path":"\#(annotationPath)"}]"#.utf8))
+
+        let stored = try await client.get(secrets, name: name, namespace: Self.namespace)
+        #expect(stored.json[path: "data", "password"] == .string("bmV3LXZhbHVl"))
+        #expect(stored.annotations["kubectl.kubernetes.io/last-applied-configuration"] == nil)
+        #expect(!String(decoding: try stored.data(), as: UTF8.self).contains("b2xkLXZhbHVl"))
+        try await client.delete(secrets, name: name, namespace: Self.namespace)
+    }
 }

@@ -39,10 +39,19 @@ extension ClusterSession {
             run { client in
                 guard let applier = self.applier else { return }
                 let object = try await client.get(kind.gvr, name: key.name, namespace: key.namespace)
-                self.editModel = YamlEditModel(
-                    title: "Edit \(kind.kind) \(key.name)", yaml: try ResourceActions.editableYAML(object),
-                    defaultNamespace: key.namespace, applier: applier, concealed: kind.kind == "Secret"
-                )
+                let title = "Edit \(kind.kind) \(key.name)"
+                // A Secret that cannot be decoded safely still opens, as base64 like any other object.
+                if kind.gvr.group.isEmpty, let secret = (try? SecretDataCodec.decode(ResourceApplier.prepared(object.json))) ?? nil {
+                    self.editModel = YamlEditModel(
+                        title: title, yaml: try YAMLRenderer.yaml(secret.json), defaultNamespace: key.namespace,
+                        applier: applier, concealed: true, secretState: secret.state
+                    )
+                } else {
+                    self.editModel = YamlEditModel(
+                        title: title, yaml: try ResourceActions.editableYAML(object),
+                        defaultNamespace: key.namespace, applier: applier, concealed: kind.kind == "Secret"
+                    )
+                }
             }
         case .portForward, .scale, .drain, .delete, .restart, .cordon, .uncordon, .nodeShell:
             assertionFailure("\(action) is routed to a sheet")

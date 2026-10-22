@@ -63,9 +63,16 @@ enum SecretMasking {
         return .object(fields)
     }
 
+    /// Text of a `data` entry, or nil when it is not valid base64 or not UTF-8 (binary).
+    static func decodedUTF8(_ value: JSONValue) -> String? {
+        guard let encoded = value.stringValue, let data = Data(base64Encoded: encoded) else { return nil }
+        return String(data: data, encoding: .utf8)
+    }
+
     /// Decoded value of a `data` entry (base64) for display after reveal.
     static func decoded(_ value: JSONValue) -> String {
+        if let text = decodedUTF8(value) { return text }
         guard let encoded = value.stringValue, let data = Data(base64Encoded: encoded) else { return value.displayText }
-        return String(data: data, encoding: .utf8) ?? "<\(data.count) bytes binary>"
+        return "<\(data.count) bytes binary>"
     }
 }
