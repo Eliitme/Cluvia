@@ -21,21 +21,39 @@ final class ClusterSession {
     private(set) var metricsAvailable = false
     var selectedKind: ResourceKind? {
         didSet {
+            let changed = selectedKind != oldValue
+            // Leaving Helm for the kind already selected records that kind with its selection; a new kind starts
+            // with none. `isSwitchingKind` keeps the clearing below from overwriting the entry being left.
+            if !isRestoringHistory, let selectedKind, changed || showingHelm {
+                history.visit(.kind(selectedKind, changed ? nil : selectedObject))
+            }
+            isSwitchingKind = true
             showingHelm = false
-            if selectedKind != oldValue { selectedObject = nil }
+            if changed { selectedObject = nil }
+            isSwitchingKind = false
             // Keep the selected kind visible in the sidebar, e.g. after picking it from the palette.
             if let category = selectedKind?.category { expandedCategories.insert(category) }
         }
     }
     /// The Helm releases page is shown instead of a resource table.
-    var showingHelm = false
+    var showingHelm = false {
+        didSet { if showingHelm, !oldValue, !isRestoringHistory { history.visit(.helm) } }
+    }
+    /// Back/Forward history of this window; changed only by the didSets here and `ClusterSession+Navigation`.
+    var history = NavigationHistory()
+    @ObservationIgnored var isRestoringHistory = false
+    @ObservationIgnored private var isSwitchingKind = false
     /// Resource groups opened in the sidebar.
     /// Starts with only the selected kind's group open (see `selectedKind`).
     var expandedCategories: Set<ResourceCategory> = []
     let helm: HelmReleasesModel
     let prometheus: PrometheusModel
     @ObservationIgnored let searchIndex = GlobalSearchIndex()
-    var selectedObject: ObjectKey?
+    var selectedObject: ObjectKey? {
+        didSet {
+            if selectedObject != oldValue, !isSwitchingKind, !isRestoringHistory { history.updateCurrent(key: selectedObject) }
+        }
+    }
     /// The detail panel next to the resource table.
     var showInspector = false
     /// The selected object is on screen (in the current table, not filtered out); object commands act only then.
@@ -52,6 +70,11 @@ final class ClusterSession {
     var selectedNamespaces: Set<String> {
         didSet { settings.setNamespaces(selectedNamespaces, for: contextName) }
     }
+
+    /// Why the kubeconfig's credential plugin last failed, at connect or later; nil once it works again.
+    var authFailure: ExecAuthFailure?
+    @ObservationIgnored var execProvider: ExecCredentialProvider?
+    @ObservationIgnored var authFailureTask: Task<Void, Never>?
 
     @ObservationIgnored private(set) var client: DynamicClient?
     @ObservationIgnored private(set) var registry: ResourceStoreRegistry?
@@ -79,8 +102,16 @@ final class ClusterSession {
 
     func connect(using contexts: ClusterCatalogModel) async {
         state = .connecting
+        stopWatchingAuth()
+        // Connecting again (e.g. retrying) replaces the watches; the old ones must not keep running.
+        registry?.releaseAll()
+        registry = nil
+        namespaceStore = nil
         do {
-            let transport = try KubeTransport(context: try contexts.resolve(contextName))
+            let context = try contexts.resolve(contextName)
+            let credentials = CredentialProviderFactory.make(for: context)
+            watchAuthFailures(of: credentials)
+            let transport = try KubeTransport(context: context, credentials: credentials)
             let client = DynamicClient(transport: transport)
             let catalog = try await APIDiscovery(transport: transport).catalog()
             let (version, _) = try await transport.data(KubeRequest(path: "/version"))
@@ -93,8 +124,12 @@ final class ClusterSession {
             kinds = ResourceKindRegistry.kinds(from: catalog)
             metricsAvailable = MetricsService.isAvailable(in: catalog)
             if selectedKind == nil { selectedKind = kinds.first { $0.gvr == .pods } ?? kinds.first }
+            authFailure = nil
             state = .connected
         } catch {
+            if let execProvider, ExecCredentialProvider.tripsBreaker(error) {
+                authFailure = ExecAuthFailure(error: error, exec: execProvider.config)
+            }
             state = .failed(error.localizedDescription)
         }
     }
@@ -106,6 +141,7 @@ final class ClusterSession {
     }
 
     func disconnect() {
+        stopWatchingAuth()
         dock.closeAll()
         portForwards.stopAll()
         registry?.releaseAll()
@@ -147,12 +183,6 @@ final class ClusterSession {
     /// Keeps the sidebar count of the kind on screen in step with its live table, between periodic recounts.
     func updateCount(_ gvr: GroupVersionResource, _ count: Int) {
         if counts[gvr] != count { counts[gvr] = count }
-    }
-
-    /// Jumps to another object, e.g. from an owner reference.
-    func reveal(_ kind: ResourceKind, _ key: ObjectKey) {
-        selectedKind = kind
-        selectedObject = key
     }
 
     /// Kind serving `ownerKind` (e.g. ReplicaSet) for navigation from owner references.

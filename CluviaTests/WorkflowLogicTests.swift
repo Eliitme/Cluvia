@@ -29,8 +29,8 @@ struct LineDiffTests {
 }
 
 struct LogBufferTests {
-    static func lines(_ range: Range<Int>) -> [LogLine] {
-        range.map { LogLine(timestamp: nil, text: "line \($0)") }
+    static func lines(_ range: Range<Int>) -> [LogEntry] {
+        range.map { LogEntry(LogLine(timestamp: nil, text: "line \($0)")) }
     }
 
     @Test func dropsOldestInChunksWithStableNumbers() {
@@ -38,11 +38,11 @@ struct LogBufferTests {
         buffer.append(Self.lines(0..<100))
         #expect(buffer.dropped == 0)
         buffer.append(Self.lines(100..<101))
-        #expect(buffer.lines.count == 90)
+        #expect(buffer.entries.count == 90)
         #expect(buffer.dropped == 11)
         #expect(buffer.endIndex == 101)
-        #expect(buffer.lines(from: 5) == nil)
-        #expect(buffer.lines(from: 100)?.first?.text == "line 100")
+        #expect(buffer.entries(from: 5) == nil)
+        #expect(buffer.entries(from: 100)?.first?.line.text == "line 100")
     }
 }
 
@@ -54,13 +54,55 @@ struct ResourceActionTests {
 
     @Test func actionsMatchKinds() {
         #expect(ResourceAction.available(for: Self.kind("Pod")) == [.logs, .shell, .portForward, .edit, .delete])
-        #expect(ResourceAction.available(for: Self.kind("Deployment")) == [.logs, .edit, .scale, .restart, .delete])
+        #expect(ResourceAction.available(for: Self.kind("Deployment")) == [.logs, .edit, .scale, .restart, .rolloutHistory, .pause, .resume, .delete])
         let service = Unstructured(.object(["spec": .object(["selector": .object(["app": .string("web"), "tier": .string("fe")])])]))
         #expect(ResourceActions.podSelector(of: service) == "app=web,tier=fe")
         let deployment = Unstructured(.object(["spec": .object(["selector": .object(["matchLabels": .object(["app": .string("web")])])])]))
         #expect(ResourceActions.podSelector(of: deployment) == "app=web")
         #expect(ResourceAction.available(for: Self.kind("Node", namespaced: false)) == [.edit, .cordon, .uncordon, .drain, .nodeShell, .delete])
-        #expect(ResourceAction.allCases.filter(\.needsConfirmation) == [.restart, .cordon, .uncordon, .nodeShell, .delete])
+        #expect(ResourceAction.allCases.filter { $0.route == .confirm } == [.restart, .pause, .resume, .trigger, .cordon, .uncordon, .nodeShell])
+        #expect(ResourceAction.allCases.filter { $0.route == .sheet } == [.portForward, .scale, .rolloutHistory, .drain, .delete])
+        #expect(ResourceAction.allCases.last == .delete)
+        let cronJob = ResourceKind(gvr: GroupVersionResource(group: "batch", version: "v1", resource: "cronjobs"),
+                                   kind: "CronJob", title: "CronJobs", namespaced: true, category: .workloads)
+        #expect(ResourceAction.available(for: cronJob) == [.edit, .trigger, .pause, .resume, .delete])
+        #expect(ResourceAction.pause.title(for: cronJob) == "Suspend")
+        #expect(ResourceAction.pause.title(for: Self.kind("Deployment")) == "Pause Rollout")
+        let lookalike = ResourceKind(gvr: GroupVersionResource(group: "example.com", version: "v1", resource: "cronjobs"),
+                                     kind: "CronJob", title: "CronJobs", namespaced: true, category: .workloads)
+        #expect(!ResourceAction.available(for: lookalike).contains(.trigger))
+        #expect(String(decoding: ResourceActions.pauseBody(kind: cronJob, paused: false), as: UTF8.self) == #"{"spec":{"suspend":false}}"#)
+        #expect(String(decoding: ResourceActions.pauseBody(kind: Self.kind("Deployment"), paused: true), as: UTF8.self) == #"{"spec":{"paused":true}}"#)
+    }
+
+    @Test func conflictAfterDeleteIsResolvedFromAFreshRead() {
+        func object(uid: String, finalizers: [String]) -> Unstructured {
+            Unstructured(.object(["metadata": .object(["uid": .string(uid), "finalizers": .array(finalizers.map(JSONValue.string))])]))
+        }
+        let outcome = ClusterSession.conflictOutcome
+        #expect(outcome(nil, "u1", true, true) == .gone)
+        #expect(outcome(object(uid: "u2", finalizers: []), "u1", true, true) == .replaced)
+        #expect(outcome(object(uid: "u1", finalizers: []), "u1", true, true) == .finalizersAlreadyRemoved)
+        // A conflict on the delete itself never counts as done, even with no finalizers left.
+        #expect(outcome(object(uid: "u1", finalizers: []), "u1", true, false) == .unresolved)
+        #expect(outcome(object(uid: "u1", finalizers: ["x"]), "u1", true, true) == .unresolved)
+        #expect(outcome(object(uid: "u2", finalizers: []), nil, false, false) == .unresolved)
+    }
+
+    @Test func forceIsOfferedOnlyForPodsAndTerminatingObjects() {
+        let configMap = ResourceKind(gvr: GroupVersionResource(group: "", version: "v1", resource: "configmaps"),
+                                     kind: "ConfigMap", title: "ConfigMaps", namespaced: true, category: .config)
+        let healthy = Unstructured(.object(["metadata": .object(["name": .string("a")])]))
+        let terminating = Unstructured(.object(["metadata": .object([
+            "name": .string("a"), "deletionTimestamp": .string("2026-10-21T00:00:00Z"),
+            "finalizers": .array([.string("kubernetes.io/pvc-protection"), .string("example.com/cleanup")]),
+        ])]))
+        #expect(!ForceDelete.isOffered(kind: configMap, object: healthy))
+        #expect(ForceDelete.isOffered(kind: configMap, object: terminating))
+        #expect(ForceDelete.isOffered(kind: Self.kind("Pod"), object: healthy))
+        #expect(ClusterSession.finalizers(of: terminating) == ["kubernetes.io/pvc-protection", "example.com/cleanup"])
+        #expect(ForceDelete.consequence(of: "kubernetes.io/pvc-protection").severe)
+        #expect(!ForceDelete.consequence(of: "example.com/cleanup").severe)
     }
 
     @Test func templatesParseAsManifests() throws {

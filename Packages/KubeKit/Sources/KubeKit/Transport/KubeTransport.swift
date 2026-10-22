@@ -31,6 +31,11 @@ public actor KubeTransport {
     }
 
     public init(context: ResolvedContext, shell: LoginShellEnvironment = .shared) throws {
+        try self.init(context: context, credentials: CredentialProviderFactory.make(for: context, shell: shell))
+    }
+
+    /// For callers that keep the provider, e.g. to watch an exec plugin's failures.
+    public init(context: ResolvedContext, credentials: any CredentialProvider) throws {
         guard let url = URL(string: context.cluster.server), url.host != nil else {
             throw KubeTransportError.invalidServerURL(context.cluster.server)
         }
@@ -38,7 +43,7 @@ public actor KubeTransport {
             serverURL: url,
             trust: try TrustPolicy.from(context.cluster),
             proxyURL: context.cluster.proxyURL,
-            credentials: CredentialProviderFactory.make(for: context, shell: shell)
+            credentials: credentials
         )
     }
 

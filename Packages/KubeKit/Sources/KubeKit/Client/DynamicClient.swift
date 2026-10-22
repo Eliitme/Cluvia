@@ -53,11 +53,18 @@ public struct DynamicClient: Sendable {
 
     /// Names and namespaces of every object, without specs or status (cheap enough to scan many kinds).
     public func listKeys(_ gvr: GroupVersionResource, namespace: String? = nil) async throws -> [ObjectKey] {
+        try await listMetadata(gvr, namespace: namespace).map(\.key)
+    }
+
+    /// Objects with `metadata` only (labels, annotations, owner references), no spec or status.
+    public func listMetadata(
+        _ gvr: GroupVersionResource, namespace: String? = nil, options: ListOptions = ListOptions()
+    ) async throws -> [Unstructured] {
         let json = try await decode(KubeRequest(
-            path: gvr.path(namespace: namespace),
+            path: gvr.path(namespace: namespace), query: options.queryItems,
             accept: "application/json;as=PartialObjectMetadataList;g=meta.k8s.io;v=v1,application/json"
         ), omittingKeys: ResourceTable.omittedKeys)
-        return (json["items"]?.arrayValue ?? []).map { Unstructured($0).key }
+        return (json["items"]?.arrayValue ?? []).map(Unstructured.init)
     }
 
     /// Number of objects without transferring them: one metadata-only item plus the server's remaining count.
@@ -93,14 +100,37 @@ public struct DynamicClient: Sendable {
         case background = "Background", foreground = "Foreground", orphan = "Orphan"
     }
 
+    /// `gracePeriodSeconds: 0` skips graceful shutdown. `preconditionUID` makes the server refuse (409) when the name
+    /// now belongs to a different object, e.g. a pod a StatefulSet recreated after the user confirmed.
     public func delete(
-        _ gvr: GroupVersionResource, name: String, namespace: String? = nil, propagationPolicy: PropagationPolicy? = .background
+        _ gvr: GroupVersionResource, name: String, namespace: String? = nil, propagationPolicy: PropagationPolicy? = .background,
+        gracePeriodSeconds: Int? = nil, preconditionUID: String? = nil
     ) async throws {
-        let body = propagationPolicy.map { #"{"kind":"DeleteOptions","apiVersion":"v1","propagationPolicy":"\#($0.rawValue)"}"# }
+        let body = try Self.deleteOptionsBody(propagation: propagationPolicy, gracePeriod: gracePeriodSeconds, uid: preconditionUID)
         _ = try await transport.data(KubeRequest(
             method: "DELETE", path: gvr.path(namespace: namespace, name: name),
-            body: body.map { Data($0.utf8) }, contentType: body == nil ? nil : "application/json"
+            body: body, contentType: body == nil ? nil : "application/json"
         ))
+    }
+
+    /// JSON patch that removes every finalizer, but only from the object with this uid (a recreated object with the
+    /// same name fails the `test` op with 422 instead of being stripped).
+    public static func finalizerRemovalPatch(uid: String) throws -> Data {
+        try JSONEncoder().encode(JSONValue.array([
+            .object(["op": .string("test"), "path": .string("/metadata/uid"), "value": .string(uid)]),
+            .object(["op": .string("remove"), "path": .string("/metadata/finalizers")]),
+        ]))
+    }
+
+    static func deleteOptionsBody(propagation: PropagationPolicy?, gracePeriod: Int?, uid: String?) throws -> Data? {
+        if gracePeriod == nil, uid == nil {
+            return propagation.map { Data(#"{"kind":"DeleteOptions","apiVersion":"v1","propagationPolicy":"\#($0.rawValue)"}"#.utf8) }
+        }
+        var options: [String: JSONValue] = ["kind": .string("DeleteOptions"), "apiVersion": .string("v1")]
+        if let propagation { options["propagationPolicy"] = .string(propagation.rawValue) }
+        if let gracePeriod { options["gracePeriodSeconds"] = .int(Int64(gracePeriod)) }
+        if let uid { options["preconditions"] = .object(["uid": .string(uid)]) }
+        return try Unstructured(.object(options)).data()
     }
 
     public func patch(

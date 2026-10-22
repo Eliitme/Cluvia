@@ -6,6 +6,10 @@ extension ClusterSession {
     func request(_ action: ResourceAction, kind: ResourceKind, key: ObjectKey) {
         // A sheet is already open for another action; starting one now would replace it and lose its state.
         guard pendingAction == nil, editModel == nil else { return }
+        guard action.route == .immediate else {
+            pendingAction = PendingAction(action: action, kind: kind, key: key)
+            return
+        }
         switch action {
         case .logs where kind.kind != "Pod":
             run { client in
@@ -35,13 +39,22 @@ extension ClusterSession {
             run { client in
                 guard let applier = self.applier else { return }
                 let object = try await client.get(kind.gvr, name: key.name, namespace: key.namespace)
-                self.editModel = YamlEditModel(
-                    title: "Edit \(kind.kind) \(key.name)", yaml: try ResourceActions.editableYAML(object),
-                    defaultNamespace: key.namespace, applier: applier, concealed: kind.kind == "Secret"
-                )
+                let title = "Edit \(kind.kind) \(key.name)"
+                // A Secret that cannot be decoded safely still opens, as base64 like any other object.
+                if kind.gvr.group.isEmpty, let secret = (try? SecretDataCodec.decode(ResourceApplier.prepared(object.json))) ?? nil {
+                    self.editModel = YamlEditModel(
+                        title: title, yaml: try YAMLRenderer.yaml(secret.json), defaultNamespace: key.namespace,
+                        applier: applier, concealed: true, secretState: secret.state
+                    )
+                } else {
+                    self.editModel = YamlEditModel(
+                        title: title, yaml: try ResourceActions.editableYAML(object),
+                        defaultNamespace: key.namespace, applier: applier, concealed: kind.kind == "Secret"
+                    )
+                }
             }
-        default:
-            pendingAction = PendingAction(action: action, kind: kind, key: key)
+        case .portForward, .scale, .drain, .delete, .rolloutHistory, .restart, .pause, .resume, .trigger, .cordon, .uncordon, .nodeShell:
+            assertionFailure("\(action) is routed to a sheet")
         }
     }
 
@@ -87,22 +100,26 @@ extension ClusterSession {
         )
     }
 
-    /// Runs a confirmed action; returns an error message for the sheet to show, or nil on success.
-    func perform(_ pending: PendingAction, propagation: DynamicClient.PropagationPolicy) async -> String? {
+    /// Runs an action confirmed in `ConfirmActionSheet`; returns an error message for the sheet to show, or nil on success.
+    func perform(_ pending: PendingAction) async -> String? {
         guard let client else { return "Not connected" }
         do {
             switch pending.action {
-            case .delete:
-                try await client.delete(pending.kind.gvr, name: pending.key.name, namespace: pending.key.namespace, propagationPolicy: propagation)
-                if selectedObject == pending.key { selectedObject = nil }
             case .restart:
                 try await ResourceActions.restart(client, kind: pending.kind, key: pending.key)
             case .cordon, .uncordon:
                 try await ResourceActions.setSchedulable(client, kind: pending.kind, key: pending.key, schedulable: pending.action == .uncordon)
             case .nodeShell:
                 try await openNodeShell(client: client, node: pending.key.name)
-            default:
-                break
+            case .pause, .resume:
+                try await ResourceActions.pauseOrResume(client, kind: pending.kind, key: pending.key, paused: pending.action == .pause)
+            case .trigger:
+                let cronJob = try await client.get(pending.kind.gvr, name: pending.key.name, namespace: pending.key.namespace)
+                let job = try await CronJobTrigger.trigger(client: client, cronJob: cronJob)
+                if let jobs = kind(named: "Job", apiVersion: "batch/v1") { reveal(jobs, job.key) }
+            case .logs, .shell, .edit, .portForward, .scale, .drain, .delete, .rolloutHistory:
+                // Listed rather than defaulted so a new action is a compile error here until it is wired up.
+                return "\(pending.action.title) is not run from a confirmation."
             }
             return nil
         } catch {

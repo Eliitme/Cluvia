@@ -19,6 +19,11 @@ struct LogAndApplyParsingTests {
         let resumed = LogStreamer.query(LogOptions(tailLines: 50), sinceTime: "2026-10-20T06:00:00Z")
         #expect(resumed.contains(URLQueryItem(name: "sinceTime", value: "2026-10-20T06:00:00Z")))
         #expect(!resumed.contains { $0.name == "tailLines" })
+        let windowed = LogStreamer.query(LogOptions(tailLines: 100, sinceSeconds: 300), sinceTime: nil)
+        #expect(windowed.contains(URLQueryItem(name: "sinceSeconds", value: "300")))
+        #expect(windowed.contains(URLQueryItem(name: "tailLines", value: "100")))
+        let resumedWindow = LogStreamer.query(LogOptions(sinceSeconds: 300), sinceTime: "2026-10-20T06:00:00Z")
+        #expect(!resumedWindow.contains { $0.name == "sinceSeconds" })
         let previous = LogStreamer.query(LogOptions(previous: true), sinceTime: nil)
         #expect(!previous.contains { $0.name == "follow" })
     }

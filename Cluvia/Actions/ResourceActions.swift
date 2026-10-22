@@ -2,7 +2,8 @@ import Foundation
 import KubeKit
 
 enum ResourceAction: String, CaseIterable, Identifiable {
-    case logs, shell, portForward, edit, scale, restart, cordon, uncordon, drain, nodeShell, delete
+    // Declaration order is the Object menu's order; Delete stays last.
+    case logs, shell, portForward, edit, scale, restart, rolloutHistory, pause, resume, trigger, cordon, uncordon, drain, nodeShell, delete
 
     var id: String { rawValue }
 
@@ -14,6 +15,10 @@ enum ResourceAction: String, CaseIterable, Identifiable {
         case .edit: "Edit YAML"
         case .scale: "Scale…"
         case .restart: "Restart"
+        case .rolloutHistory: "Rollout History…"
+        case .pause: "Pause"
+        case .resume: "Resume"
+        case .trigger: "Trigger Now"
         case .cordon: "Cordon"
         case .uncordon: "Uncordon"
         case .drain: "Drain…"
@@ -30,6 +35,10 @@ enum ResourceAction: String, CaseIterable, Identifiable {
         case .edit: "pencil"
         case .scale: "arrow.up.and.down"
         case .restart: "arrow.clockwise"
+        case .rolloutHistory: "clock.arrow.circlepath"
+        case .pause: "pause.circle"
+        case .resume: "play.circle"
+        case .trigger: "bolt"
         case .cordon: "nosign"
         case .uncordon: "checkmark.circle"
         case .drain: "arrow.down.to.line"
@@ -47,9 +56,6 @@ enum ResourceAction: String, CaseIterable, Identifiable {
         }
     }
 
-    /// Actions that disrupt workloads go through a confirmation that names the cluster context.
-    var needsConfirmation: Bool { [.restart, .cordon, .uncordon, .nodeShell, .delete].contains(self) }
-
     static func available(for kind: ResourceKind) -> [ResourceAction] {
         // Group checks keep a CRD that happens to be called "Deployment" from getting built-in actions.
         let core = kind.gvr.group.isEmpty, apps = kind.gvr.group == "apps"
@@ -60,6 +66,8 @@ enum ResourceAction: String, CaseIterable, Identifiable {
         actions.append(.edit)
         if apps, ["Deployment", "StatefulSet", "ReplicaSet"].contains(kind.kind) { actions.append(.scale) }
         if apps, ["Deployment", "StatefulSet", "DaemonSet"].contains(kind.kind) { actions.append(.restart) }
+        if apps, kind.kind == "Deployment" { actions += [.rolloutHistory, .pause, .resume] }
+        if kind.gvr.group == "batch", kind.kind == "CronJob" { actions += [.trigger, .pause, .resume] }
         if core, kind.kind == "Node" { actions += [.cordon, .uncordon, .drain, .nodeShell] }
         actions.append(.delete)
         return actions
@@ -88,6 +96,16 @@ enum ResourceActions {
         let stamp = now.formatted(.iso8601)
         let body = #"{"spec":{"template":{"metadata":{"annotations":{"\#(restartedAtAnnotation)":"\#(stamp)"}}}}}"#
         _ = try await client.patch(kind.gvr, name: key.name, namespace: key.namespace, type: .strategicMerge, body: Data(body.utf8))
+    }
+
+    /// Pauses a Deployment's rollout (`spec.paused`) or suspends a CronJob's schedule (`spec.suspend`).
+    static func pauseOrResume(_ client: DynamicClient, kind: ResourceKind, key: ObjectKey, paused: Bool) async throws {
+        _ = try await client.patch(kind.gvr, name: key.name, namespace: key.namespace, type: .merge, body: pauseBody(kind: kind, paused: paused))
+    }
+
+    static func pauseBody(kind: ResourceKind, paused: Bool) -> Data {
+        let field = kind.kind == "CronJob" ? "suspend" : "paused"
+        return Data(#"{"spec":{"\#(field)":\#(paused)}}"#.utf8)
     }
 
     static func setSchedulable(_ client: DynamicClient, kind: ResourceKind, key: ObjectKey, schedulable: Bool) async throws {

@@ -81,4 +81,84 @@ struct LogsAndApplyIntegrationTests {
         let persisted = try await client.get(Self.deployments, name: name, namespace: Self.namespace)
         #expect(persisted.json[path: "spec", "replicas"]?.intValue == target)
     }
+
+    /// Rotating a Secret created by client-side apply: the old value lives on in last-applied-configuration until
+    /// that annotation is removed explicitly, because server-side apply does not drop a field another manager owns.
+    @Test func rotatedSecretKeepsNoCopyOfTheOldValue() async throws {
+        let client = try WatchCacheIntegrationTests.client()
+        try await WatchCacheIntegrationTests.ensureNamespace(client)
+        let secrets = GroupVersionResource(group: "", version: "v1", resource: "secrets")
+        let name = "cluvia-it-rotate"
+        try? await client.delete(secrets, name: name, namespace: Self.namespace, propagationPolicy: nil)
+        while (try? await client.get(secrets, name: name, namespace: Self.namespace)) != nil {
+            try await Task.sleep(for: .milliseconds(200))
+        }
+        let lastApplied = #"{"apiVersion":"v1","kind":"Secret","metadata":{"name":"\#(name)"},"data":{"password":"b2xkLXZhbHVl"}}"#
+        let created: [String: Any] = [
+            "apiVersion": "v1", "kind": "Secret",
+            "metadata": ["name": name, "annotations": ["kubectl.kubernetes.io/last-applied-configuration": lastApplied]],
+            "data": ["password": "b2xkLXZhbHVl"],
+        ]
+        _ = try await client.transport.data(KubeRequest(
+            method: "POST", path: secrets.path(namespace: Self.namespace),
+            query: [URLQueryItem(name: "fieldManager", value: "kubectl-client-side-apply")],
+            body: try JSONSerialization.data(withJSONObject: created), contentType: "application/json"
+        ))
+
+        let applier = ResourceApplier(client: client, catalog: try await APIDiscovery(transport: client.transport).catalog())
+        let rotated = """
+        apiVersion: v1
+        kind: Secret
+        metadata:
+          name: \(name)
+          namespace: \(Self.namespace)
+        data:
+          password: bmV3LXZhbHVl
+        """
+        _ = try await applier.apply(yaml: rotated, defaultNamespace: nil, dryRun: false, force: true)
+        let annotationPath = "/metadata/annotations/kubectl.kubernetes.io~1last-applied-configuration"
+        _ = try await client.patch(secrets, name: name, namespace: Self.namespace, type: .json,
+                                   body: Data(#"[{"op":"remove","path":"\#(annotationPath)"}]"#.utf8))
+
+        let stored = try await client.get(secrets, name: name, namespace: Self.namespace)
+        #expect(stored.json[path: "data", "password"] == .string("bmV3LXZhbHVl"))
+        #expect(stored.annotations["kubectl.kubernetes.io/last-applied-configuration"] == nil)
+        #expect(!String(decoding: try stored.data(), as: UTF8.self).contains("b2xkLXZhbHVl"))
+        try await client.delete(secrets, name: name, namespace: Self.namespace)
+    }
+
+    /// A time window returns only recent lines, and is applied together with the line limit.
+    @Test func sinceSecondsLimitsLinesToTheWindow() async throws {
+        let client = try WatchCacheIntegrationTests.client()
+        try await WatchCacheIntegrationTests.ensureNamespace(client)
+        let name = "cluvia-it-since"
+        try? await client.delete(.pods, name: name, namespace: Self.namespace, propagationPolicy: nil, gracePeriodSeconds: 0)
+        while (try? await client.get(.pods, name: name, namespace: Self.namespace)) != nil { try await Task.sleep(for: .milliseconds(300)) }
+        // Ten lines at once, then nothing more: a window opened after a pause sees none of them.
+        let pod = """
+        {"apiVersion":"v1","kind":"Pod","metadata":{"name":"\(name)"},"spec":{"terminationGracePeriodSeconds":0,
+         "containers":[{"name":"main","image":"busybox:1.36","command":["sh","-c","for i in 1 2 3 4 5 6 7 8 9 10; do echo line $i; done; sleep 3600"]}]}}
+        """
+        _ = try await client.create(.pods, namespace: Self.namespace, object: Unstructured(data: Data(pod.utf8)))
+        func lines(_ options: LogOptions) async throws -> Int {
+            var count = 0
+            for try await event in LogStreamer(client: client).stream(pod: name, namespace: Self.namespace, options: options) {
+                if case .line = event { count += 1 }
+            }
+            return count
+        }
+        var all = 0
+        let deadline = Date().addingTimeInterval(60)
+        while all < 10, Date() < deadline {
+            try await Task.sleep(for: .seconds(1))
+            all = (try? await lines(LogOptions(tailLines: nil, follow: false))) ?? 0
+        }
+        try await Task.sleep(for: .seconds(3))
+        let windowed = try await lines(LogOptions(tailLines: nil, follow: false, sinceSeconds: 1))
+        let limited = try await lines(LogOptions(tailLines: 3, follow: false))
+        try? await client.delete(.pods, name: name, namespace: Self.namespace, propagationPolicy: nil, gracePeriodSeconds: 0)
+        #expect(all == 10)
+        #expect(windowed == 0)
+        #expect(limited == 3)
+    }
 }

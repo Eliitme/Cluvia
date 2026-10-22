@@ -28,6 +28,7 @@ struct OverviewView: View {
                         }
                     }
                 }
+                OwnedObjectsRow(session: session, object: object)
                 DetailRow("Created", value: object.creationTimestamp.map {
                     "\(AgeFormatter.string(since: $0)) ago · \($0.formatted(date: .abbreviated, time: .standard))"
                 })

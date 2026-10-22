@@ -13,11 +13,6 @@ final class LogViewModel: Identifiable {
         case failed(String)
     }
 
-    struct ContainerChoice: Hashable {
-        let name: String
-        let role: String?
-    }
-
     struct Source: Hashable {
         let pod: String
         let namespace: String
@@ -36,11 +31,24 @@ final class LogViewModel: Identifiable {
     var previous = false { didSet { restart() } }
     var follow = true { didSet { restart() } }
     /// Lines fetched before following; nil means the whole log.
-    var tailLines: Int? = 1000 { didSet { restart() } }
-    var showTimestamps = false
+    var tailLines: Int? = 1000 { didSet { if !adjustingWindow { restart() } } }
+    /// Only lines from the last this many seconds. A window lifts the line limit (it would otherwise cut a busy
+    /// pod's window to its last few minutes); going back to any time restores the limit chosen before.
+    var sinceSeconds: Int? {
+        didSet {
+            adjustingWindow = true
+            if oldValue == nil, sinceSeconds != nil { tailBeforeWindow = tailLines; tailLines = nil }
+            if sinceSeconds == nil, oldValue != nil { tailLines = tailBeforeWindow }
+            adjustingWindow = false
+            restart()
+        }
+    }
+    var display = LogDisplayOptions()
     var wrapLines = true
     var search = ""
     private(set) var buffer = LogBuffer()
+    /// Set by the error buttons; the text view moves the selection to the next or previous error line.
+    private(set) var jumpRequest: (id: Int, forward: Bool)?
     private(set) var status = Status.streaming
     /// Changes whenever the buffer is replaced rather than appended to, so the view must redraw everything.
     private(set) var resetToken = 0
@@ -50,23 +58,22 @@ final class LogViewModel: Identifiable {
     @ObservationIgnored private var flushTask: Task<Void, Never>?
     /// Identifies the current stream; results from a stream replaced by `restart()` are ignored.
     @ObservationIgnored private var generation = 0
-    /// Lines are received off the main actor and handed over in batches.
-    @ObservationIgnored private let inbox = OSAllocatedUnfairLock<[LogLine]>(initialState: [])
+    @ObservationIgnored private var adjustingWindow = false
+    @ObservationIgnored private var tailBeforeWindow: Int? = 1000
+    /// Lines are received (and classified) off the main actor and handed over in batches.
+    @ObservationIgnored private let inbox = OSAllocatedUnfairLock<[LogEntry]>(initialState: [])
 
     var isMultiPod: Bool { sources.count > 1 }
+    /// Pod names by source index for the `pod │ ` prefix; nil for a single pod.
+    var podNames: [String]? { isMultiPod ? sources.map(\.pod) : nil }
+
+    func jump(forward: Bool) {
+        jumpRequest = ((jumpRequest?.id ?? 0) + 1, forward)
+    }
 
     var title: String {
         if let groupTitle { return groupTitle }
         return containers.count > 1 ? "\(pod)/\(container)" : pod
-    }
-
-    /// Containers of a pod, including init and ephemeral ones.
-    static func containers(of pod: Unstructured) -> [ContainerChoice] {
-        let spec = pod.json["spec"]
-        func names(_ key: String, role: String?) -> [ContainerChoice] {
-            (spec?[key]?.arrayValue ?? []).compactMap { $0["name"]?.stringValue }.map { ContainerChoice(name: $0, role: role) }
-        }
-        return names("containers", role: nil) + names("initContainers", role: "init") + names("ephemeralContainers", role: "ephemeral")
     }
 
     init(client: DynamicClient, pod: Unstructured, container: String? = nil) {
@@ -114,40 +121,42 @@ final class LogViewModel: Identifiable {
         resetToken += 1
         status = .streaming
         let remaining = OSAllocatedUnfairLock(initialState: sources.count)
-        streamTasks = sources.map { source in
-            let options = LogOptions(container: isMultiPod ? source.container : container, previous: previous, tailLines: tailLines, follow: follow)
+        streamTasks = sources.enumerated().map { index, source in
+            let options = LogOptions(container: isMultiPod ? source.container : container, previous: previous, tailLines: tailLines,
+                                     follow: follow, sinceSeconds: sinceSeconds)
             let stream = LogStreamer(client: client).stream(pod: source.pod, namespace: source.namespace, options: options)
-            let prefix = isMultiPod ? "\(source.pod) │ " : nil
+            // Several pods: events of one pod are shown inline as lines rather than as the view's state.
+            let inline = isMultiPod
             let inbox = inbox
+            let note: @Sendable (String) -> Void = { text in
+                inbox.withLock { $0.append(LogEntry(LogLine(timestamp: nil, text: "[\(text)]"), source: index)) }
+            }
             return Task.detached { [weak self] in
                 var failure: Error?
                 do {
                     for try await event in stream {
                         switch event {
                         case let .line(line):
-                            let tagged = prefix.map { LogLine(timestamp: line.timestamp, text: $0 + line.text) } ?? line
-                            inbox.withLock { $0.append(tagged) }
-                        // With several pods, one pod restarting or going away is reported inline, not as the view's state.
+                            let entry = LogEntry(line, source: index)
+                            inbox.withLock { $0.append(entry) }
                         case let .reconnecting(reason):
-                            if let prefix { inbox.withLock { $0.append(LogLine(timestamp: nil, text: prefix + "[\(reason)]")) } }
-                            else { await self?.update(.reconnecting(reason), generation: current) }
+                            if inline { note(reason) } else { await self?.update(.reconnecting(reason), generation: current) }
                         case let .ended(reason):
-                            if let prefix { inbox.withLock { $0.append(LogLine(timestamp: nil, text: prefix + "[\(reason)]")) } }
-                            else { await self?.update(.ended(reason), generation: current) }
+                            if inline { note(reason) } else { await self?.update(.ended(reason), generation: current) }
                         }
                     }
                 } catch {
                     failure = error
                     // With several pods, one failing pod is reported inline and the others keep streaming.
-                    if let prefix { inbox.withLock { $0.append(LogLine(timestamp: nil, text: prefix + "[\(error.localizedDescription)]")) } }
+                    if inline { note(error.localizedDescription) }
                 }
                 // A cancelled stream also ends normally; only a real end reports "finished".
                 let last = remaining.withLock { count in
                     count -= 1
                     return count == 0
                 }
-                if !Task.isCancelled, last || prefix == nil {
-                    await self?.finish(error: prefix == nil ? failure : nil, generation: current)
+                if !Task.isCancelled, last || !inline {
+                    await self?.finish(error: inline ? nil : failure, generation: current)
                 }
             }
         }
