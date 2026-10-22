@@ -103,6 +103,10 @@ final class ClusterSession {
     func connect(using contexts: ClusterCatalogModel) async {
         state = .connecting
         stopWatchingAuth()
+        // Connecting again (e.g. retrying) replaces the watches; the old ones must not keep running.
+        registry?.releaseAll()
+        registry = nil
+        namespaceStore = nil
         do {
             let context = try contexts.resolve(contextName)
             let credentials = CredentialProviderFactory.make(for: context)

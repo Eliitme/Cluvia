@@ -49,7 +49,7 @@ public actor ExecCredentialProvider: CredentialProvider {
     private let cooldown: Duration
     private var cached: (credentials: Credentials, expiresAt: Date?)?
     private var generation: UInt64 = 0
-    private var inFlight: Task<(Credentials, Date?), Error>?
+    private var inFlight: Task<Credentials, Error>?
     /// Monotonic, so setting the clock back cannot hold the breaker open.
     private var lastFailure: (error: any Error, at: ContinuousClock.Instant)?
     private var failureReported = false
@@ -88,25 +88,24 @@ public actor ExecCredentialProvider: CredentialProvider {
             return cached.credentials
         }
         if let lastFailure, ContinuousClock.now - lastFailure.at < cooldown { throw lastFailure.error }
-        // Concurrent callers share one plugin run; only this caller reports its outcome.
-        if let inFlight { return try await inFlight.value.0 }
+        // Concurrent callers share one plugin run and all get its finished result, generation included.
+        if let inFlight { return try await inFlight.value }
         let task = Task { [config, cluster, shell] in
-            try await Self.execute(config: config, cluster: cluster, shell: shell)
+            do {
+                return self.finished(try await Self.execute(config: config, cluster: cluster, shell: shell))
+            } catch {
+                self.failed(error)
+                throw error
+            }
         }
         inFlight = task
         defer { inFlight = nil }
-        var (credentials, expiresAt): (Credentials, Date?)
-        do {
-            (credentials, expiresAt) = try await task.value
-        } catch {
-            if Self.tripsBreaker(error) {
-                lastFailure = (error, ContinuousClock.now)
-                failureReported = true
-                reportedFailureCount += 1
-                failureContinuation?.yield(error)
-            }
-            throw error
-        }
+        return try await task.value
+    }
+
+    /// Records a successful run once, whichever caller started it.
+    private func finished(_ result: (Credentials, Date?)) -> Credentials {
+        var (credentials, expiresAt) = result
         lastFailure = nil
         if failureReported {
             failureReported = false
@@ -118,6 +117,15 @@ public actor ExecCredentialProvider: CredentialProvider {
         credentials.generation = generation
         cached = (credentials, expiresAt)
         return credentials
+    }
+
+    /// Opens the breaker and reports the failure once, however many callers were waiting on the run.
+    private func failed(_ error: any Error) {
+        guard Self.tripsBreaker(error) else { return }
+        lastFailure = (error, ContinuousClock.now)
+        failureReported = true
+        reportedFailureCount += 1
+        failureContinuation?.yield(error)
     }
 
     /// A plugin that failed, could not start or timed out (an unfinished browser sign-in); not a cancelled request.

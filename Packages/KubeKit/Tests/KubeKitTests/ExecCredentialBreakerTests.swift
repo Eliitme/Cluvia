@@ -65,6 +65,21 @@ struct ExecCredentialBreakerTests {
         #expect((replayed ?? nil) is ExecPluginError)
     }
 
+    /// Callers that waited on another caller's run get the same generation, so a 401 one of them sees evicts the cache.
+    @Test func concurrentCallersShareTheRunsGeneration() async throws {
+        let plugin = try ExecCredentialDecodingTests.countingPlugin(expiry: "2099-01-01T00:00:00Z")
+        let provider = ExecCredentialProvider(config: ExecConfig(command: plugin.script.path), cluster: ExecCredentialDecodingTests.cluster)
+        let generations = await withTaskGroup(of: UInt64.self) { group in
+            for _ in 0..<8 { group.addTask { (try? await provider.credentials())?.generation ?? 0 } }
+            return await group.reduce(into: Set<UInt64>()) { $0.insert($1) }
+        }
+        #expect(generations == [1])
+        #expect(ExecCredentialDecodingTests.runs(plugin.counter) == 1)
+        await provider.invalidate(generation: 1)
+        _ = try await provider.credentials()
+        #expect(ExecCredentialDecodingTests.runs(plugin.counter) == 2)
+    }
+
     @Test func cancellationDoesNotTripTheBreaker() {
         #expect(!ExecCredentialProvider.tripsBreaker(ProcessRunnerError.cancelled(executable: "x")))
         #expect(ExecCredentialProvider.tripsBreaker(ProcessRunnerError.timedOut(executable: "x", seconds: 120)))
