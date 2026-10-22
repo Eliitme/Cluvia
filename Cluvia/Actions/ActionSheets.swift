@@ -21,7 +21,7 @@ struct ConfirmActionSheet: View {
             HStack {
                 Spacer()
                 Button("Cancel", role: .cancel) { dismiss() }.keyboardShortcut(.cancelAction)
-                Button(pending.action.title.replacingOccurrences(of: "…", with: "")) {
+                Button(pending.action.title(for: pending.kind).replacingOccurrences(of: "…", with: "")) {
                     busy = true
                     Task {
                         error = await perform()
@@ -38,14 +38,25 @@ struct ConfirmActionSheet: View {
     }
 
     private var title: String {
-        pending.action == .nodeShell
-            ? "Open a shell on this node?"
-            : "\(pending.action.title.replacingOccurrences(of: "…", with: "")) \(pending.kind.kind)?"
+        switch pending.action {
+        case .nodeShell: "Open a shell on this node?"
+        case .trigger: "Run \(pending.kind.kind) now?"
+        case .pause where pending.kind.kind == "Deployment": "Pause the rollout?"
+        case .resume where pending.kind.kind == "Deployment": "Resume the rollout?"
+        case .pause: "Suspend \(pending.kind.kind)?"
+        case .resume: "Resume \(pending.kind.kind)?"
+        default: "\(pending.action.title(for: pending.kind).replacingOccurrences(of: "…", with: "")) \(pending.kind.kind)?"
+        }
     }
 
     private var explanation: String {
         switch pending.action {
         case .restart: "Pods are replaced according to the rollout strategy."
+        case .pause where pending.kind.kind == "CronJob": "No new Jobs will be scheduled. Running Jobs continue."
+        case .pause: "Changes to the pod template will not roll out until the rollout is resumed."
+        case .resume where pending.kind.kind == "CronJob": "Jobs will be scheduled again from the next scheduled time."
+        case .resume: "Pending changes to the pod template roll out now."
+        case .trigger: "Creates a Job from the CronJob's template now, outside its schedule."
         case .cordon: "New pods will not be scheduled on this node. Running pods are not evicted."
         case .uncordon: "The node will accept new pods again."
         case .nodeShell: "Creates a privileged pod (host PID, network and IPC) from \(NodeShellPod.image) in \(NodeShellPod.namespace) on this node, "

@@ -53,7 +53,7 @@ extension ClusterSession {
                     )
                 }
             }
-        case .portForward, .scale, .drain, .delete, .restart, .cordon, .uncordon, .nodeShell:
+        case .portForward, .scale, .drain, .delete, .rolloutHistory, .restart, .pause, .resume, .trigger, .cordon, .uncordon, .nodeShell:
             assertionFailure("\(action) is routed to a sheet")
         }
     }
@@ -111,7 +111,13 @@ extension ClusterSession {
                 try await ResourceActions.setSchedulable(client, kind: pending.kind, key: pending.key, schedulable: pending.action == .uncordon)
             case .nodeShell:
                 try await openNodeShell(client: client, node: pending.key.name)
-            case .logs, .shell, .edit, .portForward, .scale, .drain, .delete:
+            case .pause, .resume:
+                try await ResourceActions.pauseOrResume(client, kind: pending.kind, key: pending.key, paused: pending.action == .pause)
+            case .trigger:
+                let cronJob = try await client.get(pending.kind.gvr, name: pending.key.name, namespace: pending.key.namespace)
+                let job = try await CronJobTrigger.trigger(client: client, cronJob: cronJob)
+                if let jobs = kind(named: "Job", apiVersion: "batch/v1") { reveal(jobs, job.key) }
+            case .logs, .shell, .edit, .portForward, .scale, .drain, .delete, .rolloutHistory:
                 // Listed rather than defaulted so a new action is a compile error here until it is wired up.
                 return "\(pending.action.title) is not run from a confirmation."
             }

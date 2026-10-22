@@ -28,7 +28,7 @@ struct ResourceDetailView: View {
                     Text(kind.kind + (row.object.namespace.map { " · \($0)" } ?? "")).foregroundStyle(.secondary)
                     if let summary = model.object.flatMap(StatusSummary.init) { StatusBadge(summary: summary) }
                 }
-                ResourceActionBar(actions: ResourceAction.available(for: kind)) { action in
+                ResourceActionBar(kind: kind, actions: ResourceAction.available(for: kind)) { action in
                     session.request(action, kind: kind, key: row.id)
                 }
                 Picker("", selection: $tab) {

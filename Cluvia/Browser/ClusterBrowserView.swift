@@ -72,7 +72,9 @@ struct ActionSheetsModifier: ViewModifier {
                     DrainSheet(pending: pending, contextName: session.contextName, client: session.client)
                 case .delete:
                     DeleteSheet(session: session, pending: pending)
-                case .restart, .cordon, .uncordon, .nodeShell:
+                case .rolloutHistory:
+                    RolloutHistorySheet(session: session, pending: pending)
+                case .restart, .pause, .resume, .trigger, .cordon, .uncordon, .nodeShell:
                     ConfirmActionSheet(pending: pending, contextName: session.contextName) {
                         await session.perform(pending)
                     }

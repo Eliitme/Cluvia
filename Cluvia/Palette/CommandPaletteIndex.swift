@@ -27,7 +27,7 @@ enum CommandPaletteIndex {
         var items: [PaletteItem] = []
         if let selectedKind = session.selectedKind, let key = session.selectedObject {
             items += ResourceAction.available(for: selectedKind).map {
-                PaletteItem(id: "action:\($0.rawValue)", title: "\($0.title.replacingOccurrences(of: "…", with: "")) \(key.name)",
+                PaletteItem(id: "action:\($0.rawValue)", title: "\($0.title(for: selectedKind).replacingOccurrences(of: "…", with: "")) \(key.name)",
                             subtitle: selectedKind.kind, symbol: $0.symbol, command: .action($0, selectedKind, key))
             }
         }

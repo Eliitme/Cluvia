@@ -13,7 +13,7 @@ struct ObjectCommands: Commands {
             let available = kind.map(ResourceAction.available(for:)) ?? []
             ForEach(ResourceAction.allCases) { action in
                 if available.contains(action) || available.isEmpty {
-                    Button(action.title) {
+                    Button(kind.map(action.title(for:)) ?? action.title) {
                         if let session, let kind, let key { session.request(action, kind: kind, key: key) }
                     }
                     .keyboardShortcut(action.shortcut)

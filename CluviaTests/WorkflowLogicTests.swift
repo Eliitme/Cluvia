@@ -54,14 +54,25 @@ struct ResourceActionTests {
 
     @Test func actionsMatchKinds() {
         #expect(ResourceAction.available(for: Self.kind("Pod")) == [.logs, .shell, .portForward, .edit, .delete])
-        #expect(ResourceAction.available(for: Self.kind("Deployment")) == [.logs, .edit, .scale, .restart, .delete])
+        #expect(ResourceAction.available(for: Self.kind("Deployment")) == [.logs, .edit, .scale, .restart, .rolloutHistory, .pause, .resume, .delete])
         let service = Unstructured(.object(["spec": .object(["selector": .object(["app": .string("web"), "tier": .string("fe")])])]))
         #expect(ResourceActions.podSelector(of: service) == "app=web,tier=fe")
         let deployment = Unstructured(.object(["spec": .object(["selector": .object(["matchLabels": .object(["app": .string("web")])])])]))
         #expect(ResourceActions.podSelector(of: deployment) == "app=web")
         #expect(ResourceAction.available(for: Self.kind("Node", namespaced: false)) == [.edit, .cordon, .uncordon, .drain, .nodeShell, .delete])
-        #expect(ResourceAction.allCases.filter { $0.route == .confirm } == [.restart, .cordon, .uncordon, .nodeShell])
-        #expect(ResourceAction.allCases.filter { $0.route == .sheet } == [.portForward, .scale, .drain, .delete])
+        #expect(ResourceAction.allCases.filter { $0.route == .confirm } == [.restart, .pause, .resume, .trigger, .cordon, .uncordon, .nodeShell])
+        #expect(ResourceAction.allCases.filter { $0.route == .sheet } == [.portForward, .scale, .rolloutHistory, .drain, .delete])
+        #expect(ResourceAction.allCases.last == .delete)
+        let cronJob = ResourceKind(gvr: GroupVersionResource(group: "batch", version: "v1", resource: "cronjobs"),
+                                   kind: "CronJob", title: "CronJobs", namespaced: true, category: .workloads)
+        #expect(ResourceAction.available(for: cronJob) == [.edit, .trigger, .pause, .resume, .delete])
+        #expect(ResourceAction.pause.title(for: cronJob) == "Suspend")
+        #expect(ResourceAction.pause.title(for: Self.kind("Deployment")) == "Pause Rollout")
+        let lookalike = ResourceKind(gvr: GroupVersionResource(group: "example.com", version: "v1", resource: "cronjobs"),
+                                     kind: "CronJob", title: "CronJobs", namespaced: true, category: .workloads)
+        #expect(!ResourceAction.available(for: lookalike).contains(.trigger))
+        #expect(String(decoding: ResourceActions.pauseBody(kind: cronJob, paused: false), as: UTF8.self) == #"{"spec":{"suspend":false}}"#)
+        #expect(String(decoding: ResourceActions.pauseBody(kind: Self.kind("Deployment"), paused: true), as: UTF8.self) == #"{"spec":{"paused":true}}"#)
     }
 
     @Test func conflictAfterDeleteIsResolvedFromAFreshRead() {

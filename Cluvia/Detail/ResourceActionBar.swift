@@ -3,6 +3,7 @@ import SwiftUI
 /// Actions for the inspected object. Buttons show titles when the panel is wide enough and collapse to icons
 /// otherwise; Delete stands apart, in red, so it is never mistaken for a neighbor.
 struct ResourceActionBar: View {
+    let kind: ResourceKind
     let actions: [ResourceAction]
     let perform: (ResourceAction) -> Void
 
@@ -27,11 +28,11 @@ struct ResourceActionBar: View {
 
     private func button(_ action: ResourceAction, titled: Bool) -> some View {
         Button { perform(action) } label: {
-            Label(action.shortTitle, systemImage: action.symbol)
+            Label(action.shortTitle(for: kind), systemImage: action.symbol)
                 .labelStyle(TitledLabelStyle(titled: titled))
         }
         .help(action.helpText)
-        .accessibilityLabel(action.title)
+        .accessibilityLabel(action.title(for: kind))
     }
 }
 

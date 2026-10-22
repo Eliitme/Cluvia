@@ -12,7 +12,15 @@ extension ResourceAction {
         case .restart: KeyboardShortcut("r", modifiers: [.command, .option])
         // Not ⌘⌫: in text fields that deletes to the start of the line.
         case .delete: KeyboardShortcut(.delete, modifiers: [.command, .option])
-        case .cordon, .uncordon, .drain, .nodeShell: nil
+        case .cordon, .uncordon, .drain, .nodeShell, .rolloutHistory, .pause, .resume, .trigger: nil
+        }
+    }
+
+    /// Short title naming what the action does to this kind ("Suspend" for a CronJob's Pause).
+    func shortTitle(for kind: ResourceKind) -> String {
+        switch (self, kind.kind) {
+        case (.pause, "CronJob"): "Suspend"
+        default: shortTitle
         }
     }
 
@@ -22,6 +30,7 @@ extension ResourceAction {
         case .portForward: "Forward"
         case .edit: "Edit"
         case .nodeShell: "Shell"
+        case .rolloutHistory: "History"
         default: title.replacingOccurrences(of: "…", with: "")
         }
     }
