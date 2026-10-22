@@ -71,6 +71,11 @@ final class ClusterSession {
         didSet { settings.setNamespaces(selectedNamespaces, for: contextName) }
     }
 
+    /// Why the kubeconfig's credential plugin last failed, at connect or later; nil once it works again.
+    var authFailure: ExecAuthFailure?
+    @ObservationIgnored var execProvider: ExecCredentialProvider?
+    @ObservationIgnored var authFailureTask: Task<Void, Never>?
+
     @ObservationIgnored private(set) var client: DynamicClient?
     @ObservationIgnored private(set) var registry: ResourceStoreRegistry?
     private(set) var namespaceStore: ResourceStore<ResourceTableRow>?
@@ -97,8 +102,12 @@ final class ClusterSession {
 
     func connect(using contexts: ClusterCatalogModel) async {
         state = .connecting
+        stopWatchingAuth()
         do {
-            let transport = try KubeTransport(context: try contexts.resolve(contextName))
+            let context = try contexts.resolve(contextName)
+            let credentials = CredentialProviderFactory.make(for: context)
+            watchAuthFailures(of: credentials)
+            let transport = try KubeTransport(context: context, credentials: credentials)
             let client = DynamicClient(transport: transport)
             let catalog = try await APIDiscovery(transport: transport).catalog()
             let (version, _) = try await transport.data(KubeRequest(path: "/version"))
@@ -111,8 +120,12 @@ final class ClusterSession {
             kinds = ResourceKindRegistry.kinds(from: catalog)
             metricsAvailable = MetricsService.isAvailable(in: catalog)
             if selectedKind == nil { selectedKind = kinds.first { $0.gvr == .pods } ?? kinds.first }
+            authFailure = nil
             state = .connected
         } catch {
+            if let execProvider, ExecCredentialProvider.tripsBreaker(error) {
+                authFailure = ExecAuthFailure(error: error, exec: execProvider.config)
+            }
             state = .failed(error.localizedDescription)
         }
     }
@@ -124,6 +137,7 @@ final class ClusterSession {
     }
 
     func disconnect() {
+        stopWatchingAuth()
         dock.closeAll()
         portForwards.stopAll()
         registry?.releaseAll()

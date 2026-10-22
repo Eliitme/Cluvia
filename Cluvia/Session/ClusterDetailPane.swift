@@ -11,6 +11,13 @@ struct ClusterDetailPane: View {
             switch session.state {
             case .disconnected, .connecting:
                 ProgressView("Connecting to \(session.contextName)…").frame(maxWidth: .infinity, maxHeight: .infinity)
+            case .failed where session.authFailure != nil:
+                if let failure = session.authFailure {
+                    ExecAuthFailureView(failure: failure, contextName: session.contextName) {
+                        await session.retryAfterSignIn(using: catalog)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
             case let .failed(reason):
                 ContentUnavailableView {
                     Label("Cannot Connect", systemImage: "exclamationmark.triangle")

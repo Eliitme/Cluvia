@@ -125,7 +125,10 @@ struct ResourceBrowserView: View {
 
     @ViewBuilder
     private var phaseBanner: some View {
-        if case let .reconnecting(reason)? = phase {
+        // A failed sign-in is why every watch is reconnecting; say that once, with a way to sign in.
+        if session.authFailure != nil {
+            AuthExpiredBanner(session: session)
+        } else if case let .reconnecting(reason)? = phase {
             Label("Reconnecting — showing last known state. \(reason)", systemImage: "wifi.exclamationmark")
                 .font(.callout)
                 .lineLimit(1)

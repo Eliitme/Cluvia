@@ -33,42 +33,100 @@ struct ExecCredential: Decodable {
 }
 
 /// Runs a kubeconfig `exec` credential plugin and caches its output until shortly before it expires.
+///
+/// After a failed run the error is returned again without running the plugin until `reset()` or a cooldown: every
+/// watch retries on its own backoff, and rerunning an interactive plugin each time would keep opening browser
+/// windows or lock the account at the identity provider.
 public actor ExecCredentialProvider: CredentialProvider {
     /// Interactive plugins (browser OIDC login) may legitimately take a while.
     static let timeout: Duration = .seconds(120)
     static let expiryLeeway: TimeInterval = 30
+    static let failureCooldown: Duration = .seconds(60)
 
-    private let config: ExecConfig
+    public nonisolated let config: ExecConfig
     private let cluster: Cluster
     private let shell: LoginShellEnvironment
+    private let cooldown: Duration
     private var cached: (credentials: Credentials, expiresAt: Date?)?
     private var generation: UInt64 = 0
     private var inFlight: Task<(Credentials, Date?), Error>?
+    /// Monotonic, so setting the clock back cannot hold the breaker open.
+    private var lastFailure: (error: any Error, at: ContinuousClock.Instant)?
+    private var failureReported = false
+    /// Failures sent to `failures()`; tests check each failed run is reported once, not once per waiting caller.
+    private(set) var reportedFailureCount = 0
+    private var failureContinuation: AsyncStream<(any Error)?>.Continuation?
 
     public init(config: ExecConfig, cluster: Cluster, shell: LoginShellEnvironment = .shared) {
+        self.init(config: config, cluster: cluster, shell: shell, cooldown: Self.failureCooldown)
+    }
+
+    init(config: ExecConfig, cluster: Cluster, shell: LoginShellEnvironment, cooldown: Duration) {
         self.config = config
         self.cluster = cluster
         self.shell = shell
+        self.cooldown = cooldown
+    }
+
+    /// Plugin failures as they happen, and `nil` once a later run succeeds. One consumer: subscribing again ends the
+    /// previous stream. A failure that is still current is delivered immediately.
+    public func failures() -> AsyncStream<(any Error)?> {
+        let (stream, continuation) = AsyncStream.makeStream(of: (any Error)?.self, bufferingPolicy: .bufferingNewest(1))
+        failureContinuation?.finish()
+        failureContinuation = continuation
+        if let lastFailure { continuation.yield(lastFailure.error) }
+        return stream
+    }
+
+    /// Lets the next request run the plugin again (the user signed in, or asked to retry).
+    public func reset() {
+        lastFailure = nil
     }
 
     public func credentials() async throws -> Credentials {
         if let cached, cached.expiresAt.map({ $0.timeIntervalSinceNow > Self.expiryLeeway }) ?? true {
             return cached.credentials
         }
-        // Concurrent callers share one plugin run.
+        if let lastFailure, ContinuousClock.now - lastFailure.at < cooldown { throw lastFailure.error }
+        // Concurrent callers share one plugin run; only this caller reports its outcome.
         if let inFlight { return try await inFlight.value.0 }
         let task = Task { [config, cluster, shell] in
             try await Self.execute(config: config, cluster: cluster, shell: shell)
         }
         inFlight = task
         defer { inFlight = nil }
-        var (credentials, expiresAt) = try await task.value
+        var (credentials, expiresAt): (Credentials, Date?)
+        do {
+            (credentials, expiresAt) = try await task.value
+        } catch {
+            if Self.tripsBreaker(error) {
+                lastFailure = (error, ContinuousClock.now)
+                failureReported = true
+                reportedFailureCount += 1
+                failureContinuation?.yield(error)
+            }
+            throw error
+        }
+        lastFailure = nil
+        if failureReported {
+            failureReported = false
+            failureContinuation?.yield(nil)
+        }
         // Every plugin result is a new generation, including expiry-driven refreshes, so a late 401 for the
         // previous token cannot evict this one.
         generation += 1
         credentials.generation = generation
         cached = (credentials, expiresAt)
         return credentials
+    }
+
+    /// A plugin that failed, could not start or timed out (an unfinished browser sign-in); not a cancelled request.
+    public static func tripsBreaker(_ error: any Error) -> Bool {
+        switch error {
+        case is ExecPluginError: true
+        case let error as ProcessRunnerError: if case .cancelled = error { false } else { true }
+        default: false
+        }
     }
 
     public func invalidate(generation stale: UInt64) {
@@ -110,7 +168,11 @@ public actor ExecCredentialProvider: CredentialProvider {
         }
         var credentials = Credentials(bearerToken: status.token.flatMap { $0.isEmpty ? nil : $0 })
         if let cert = status.clientCertificateData, let key = status.clientKeyData {
-            credentials.identity = try await ClientIdentityFactory.identity(certificatePEM: Data(cert.utf8), keyPEM: Data(key.utf8))
+            do {
+                credentials.identity = try await ClientIdentityFactory.identity(certificatePEM: Data(cert.utf8), keyPEM: Data(key.utf8))
+            } catch {
+                throw ExecPluginError.invalidOutput(command: command, reason: "unusable client certificate: \(error.localizedDescription)")
+            }
         }
         guard credentials.bearerToken != nil || credentials.identity != nil else {
             throw ExecPluginError.invalidOutput(command: command, reason: "status has neither token nor client certificate")

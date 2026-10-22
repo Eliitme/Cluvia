@@ -45,6 +45,10 @@ final class ShutdownCleanup {
 }
 
 final class CluviaAppDelegate: NSObject, NSApplicationDelegate {
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        LoginTerminalLauncher.sweepLeftovers()
+    }
+
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         Task { @MainActor in
             await ShutdownCleanup.shared.runAll()
